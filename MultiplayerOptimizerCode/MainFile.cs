@@ -1,3 +1,5 @@
+using BaseLib.Config;
+using BaseLib.Utils;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
@@ -16,8 +18,11 @@ public partial class MainFile : Node
 
     public static void Initialize()
     {
-        Harmony harmony = new(ModId);
+        // 注册 Mod 配置；注册后 Mod 才会出现在 Settings -> Mod Configuration 列表里
+        // 必须放在其他初始化逻辑之前，保证后续代码读到的是已加载的配置值
+        ModConfigRegistry.Register(ModId, new MultiplayerOptimizerConfig());
 
+        Harmony harmony = new(ModId);
         harmony.PatchAll();
     }
 }
