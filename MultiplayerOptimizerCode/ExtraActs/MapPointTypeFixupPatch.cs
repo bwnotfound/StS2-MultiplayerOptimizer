@@ -32,30 +32,28 @@ public static class MapPointTypeFixupPatch
 
         if (state.Act is Act4Model)
         {
-            int changed = 0;
+            var changed = 0;
             foreach (var point in state.Map.GetAllMapPoints())
-            {
                 // Act4 全是精英：Monster 全部转 Elite，无视 CanBeModified
                 if (point.PointType == MapPointType.Monster)
                 {
                     point.PointType = MapPointType.Elite;
                     changed++;
                 }
-            }
+
             MainFile.Logger.Info(
                 $"[ExtraActs] Act4 map UI fixup: changed {changed} Monster->Elite (final boss kept)");
         }
         else if (state.Act is Act5Model)
         {
-            int changed = 0;
+            var changed = 0;
             foreach (var point in state.Map.GetAllMapPoints())
-            {
                 if (point.PointType == MapPointType.Elite && point.CanBeModified)
                 {
                     point.PointType = MapPointType.Monster;
                     changed++;
                 }
-            }
+
             MainFile.Logger.Info(
                 $"[ExtraActs] Act5 map UI fixup: changed {changed} Elite->Monster (final boss kept)");
         }

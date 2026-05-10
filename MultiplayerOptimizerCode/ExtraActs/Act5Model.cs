@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using BaseLib.Abstracts;
 using BaseLib.Utils;
 using MegaCrit.Sts2.Core.Helpers;
@@ -16,16 +17,20 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 /// <summary>
 /// 第 5 层。
 ///
-/// 视觉：借用 Glory (act 3) 的资源。
-/// 内容：复用 Glory；后续 step 4 改为加权混合池。
-/// 战斗调整：所有 Monster + Elite 节点战斗时抽 Boss encounter（由 CustomActEncounterReplacementPatch 实现）。
-/// 顶端最终 boss 保持真 boss，由 DeduplicateCustomActBossesPatch 保证不和前 4 层重复。
-/// 地图：用 StandardActMap，参数对齐 Glory。
-/// 节点 UI：所有 Elite 节点改为 Monster（由 Act5MapPointTypeFixupPatch 处理），让中间节点 UI 统一为 Monster 图标。
+/// 视觉/音乐：背景借 act 3 (Glory)，BGM 也是 act 3。
+/// 关卡：中部所有节点都是 boss 战内容（PointType=Monster + RoomType 被 mask 为 Monster），
+/// 顶端是真 boss。
+///
+/// Encounter 池：
+///   - 不混合 AllBossEncounters（保持 = Glory boss 池），因为需求 5.3 要求最终 boss 必须从 act3 抽
+///   - 中部 boss 战的内容混合在 CustomActEncounterReplacementPatch 里单独处理，
+///     直接从 act1+2+3 boss 池构造混合 list 填进 normalEncounters/eliteEncounters
+///
+/// Event 池：跟 Act4 同样，用 BuildWeightedFlatList 加权混合 act1+2+3 的事件池。
 /// </summary>
 public class Act5Model : CustomActModel
 {
-    public Act5Model() : base(actNumber: -1)
+    public Act5Model() : base(-1)
     {
     }
 
@@ -42,7 +47,6 @@ public class Act5Model : CustomActModel
     protected override string CustomRestSiteBackgroundPath =>
         SceneHelper.GetScenePath("rest_site/glory_rest_site");
 
-    // 音乐 / 音效：act 3 (Glory) 的实际路径
     public override string[] BgMusicOptions =>
         new[] { "event:/music/act3_a1_v2", "event:/music/act3_a2_v2" };
 
@@ -51,25 +55,42 @@ public class Act5Model : CustomActModel
 
     public override string AmbientSfx => "event:/sfx/ambience/act3_ambience";
 
-    // 内容池：复用 Glory（后续混合池在 step 4）
-    public override IEnumerable<EncounterModel> GenerateAllEncounters() =>
-        ModelDb.Act<Glory>().AllEncounters;
+    // 关键：保持 = Glory.AllEncounters，不混合 boss
+    // Act5 最终 boss 必须从 act3 boss 池抽（需求 5.3）
+    public override IEnumerable<EncounterModel> GenerateAllEncounters()
+    {
+        return ModelDb.Act<Glory>().AllEncounters;
+    }
 
-    public override IEnumerable<EventModel> AllEvents =>
-        ModelDb.Act<Glory>().AllEvents;
+    public override IEnumerable<EventModel> AllEvents
+    {
+        get
+        {
+            var w = ExtraActsConfig.GetEventWeights(5);
+            var weightedEventPools = new List<(IReadOnlyList<EventModel>, double)>
+            {
+                (ModelDb.Act<Overgrowth>().AllEvents.ToList(), w.Act1),
+                (ModelDb.Act<Hive>().AllEvents.ToList(), w.Act2),
+                (ModelDb.Act<Glory>().AllEvents.ToList(), w.Act3)
+            };
+            return EncounterListBuilder.BuildWeightedFlatList(weightedEventPools);
+        }
+    }
 
     public override IEnumerable<AncientEventModel> AllAncients =>
         Array.Empty<AncientEventModel>();
 
-    public override IEnumerable<AncientEventModel> GetUnlockedAncients(UnlockState state) =>
-        Array.Empty<AncientEventModel>();
+    public override IEnumerable<AncientEventModel> GetUnlockedAncients(UnlockState state)
+    {
+        return Array.Empty<AncientEventModel>();
+    }
 
     protected override int BaseNumberOfRooms => 13;
 
     public override MapPointTypeCounts GetMapPointTypes(Rng mapRng)
     {
-        int restCount = mapRng.NextInt(5, 7);
-        int unknownCount = MapPointTypeCounts.StandardRandomUnknownCount(mapRng) - 1;
+        var restCount = mapRng.NextInt(5, 7);
+        var unknownCount = MapPointTypeCounts.StandardRandomUnknownCount(mapRng) - 1;
         return new MapPointTypeCounts(unknownCount, restCount);
     }
 }

@@ -45,10 +45,8 @@ public static class Act5MaskBossRoomTypePatch
         // null 时比较结果是 false（不是 boss 节点 → 继续往下掩盖）。
         // 这跟 NRewardsScreen 源码里的写法一致。
         if (state.CurrentMapCoord == state.Map.BossMapPoint.coord)
-        {
             // 顶端 boss，保持 Boss
             return;
-        }
 
         // 中间节点的伪装 boss → 报告为 Monster
         __result = RoomType.Monster;

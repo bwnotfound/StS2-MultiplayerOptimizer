@@ -41,7 +41,7 @@ public class TestCard : CustomCardModel
         GD.Print($"[MultiplayerOptimizer] TestCard AfterCreated. Id={Id}");
     }
 
-    public override string PortraitPath => CardModel.MissingPortraitPath;
+    public override string PortraitPath => MissingPortraitPath;
 
     public override List<(string, string)>? Localization =>
     [
@@ -102,8 +102,8 @@ public class TestCard : CustomCardModel
 
     private void IncreaseDamage()
     {
-        int oldDamage = CurrentDamage;
-        int newDamage = Math.Min(CurrentDamage + DamageDelta, MaxDamage);
+        var oldDamage = CurrentDamage;
+        var newDamage = Math.Min(CurrentDamage + DamageDelta, MaxDamage);
 
         if (newDamage == oldDamage)
             return;
@@ -118,10 +118,8 @@ public class TestCard : CustomCardModel
     private void ResetDamage(string reason)
     {
         if (CurrentDamage != InitDamage)
-        {
             GD.Print(
                 $"[MultiplayerOptimizer] TestCard damage reset by {reason}: {CurrentDamage} -> {InitDamage}");
-        }
 
         CurrentDamage = InitDamage;
         SyncDamageVar();

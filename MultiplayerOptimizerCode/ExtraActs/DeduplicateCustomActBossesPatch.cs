@@ -32,7 +32,7 @@ public static class DeduplicateCustomActBossesPatch
 
         foreach (var act in state.Acts)
         {
-            bool isCustomExtra = act is Act4Model || act is Act5Model;
+            var isCustomExtra = act is Act4Model || act is Act5Model;
 
             if (isCustomExtra)
             {

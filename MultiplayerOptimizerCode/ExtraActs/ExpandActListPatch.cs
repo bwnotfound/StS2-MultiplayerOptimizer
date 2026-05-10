@@ -33,15 +33,9 @@ public static class ExpandActListPatch
     {
         var list = __result.ToList();
 
-        if (ExtraActsBootstrap.Act4 != null)
-        {
-            list.Add(ExtraActsBootstrap.Act4);
-        }
+        if (ExtraActsBootstrap.Act4 != null) list.Add(ExtraActsBootstrap.Act4);
 
-        if (ExtraActsBootstrap.Act5 != null)
-        {
-            list.Add(ExtraActsBootstrap.Act5);
-        }
+        if (ExtraActsBootstrap.Act5 != null) list.Add(ExtraActsBootstrap.Act5);
 
         MainFile.Logger.Info(
             $"[ExtraActs] Final act list ({list.Count}): " +
