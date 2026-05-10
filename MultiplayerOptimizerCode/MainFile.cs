@@ -3,24 +3,25 @@ using BaseLib.Utils;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
+using MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode;
 
-//You're recommended but not required to keep all your code in this package and all your assets in the MultiplayerOptimizer folder.
 [ModInitializer(nameof(Initialize))]
 public partial class MainFile : Node
 {
-    public const string
-        ModId = "MultiplayerOptimizer"; //At the moment, this is used only for the Logger and harmony names.
+    public const string ModId = "MultiplayerOptimizer";
 
     public static MegaCrit.Sts2.Core.Logging.Logger Logger { get; } =
         new(ModId, MegaCrit.Sts2.Core.Logging.LogType.Generic);
 
     public static void Initialize()
     {
-        // 注册 Mod 配置；注册后 Mod 才会出现在 Settings -> Mod Configuration 列表里
-        // 必须放在其他初始化逻辑之前，保证后续代码读到的是已加载的配置值
+        // 注册 Mod 配置
         ModConfigRegistry.Register(ModId, new MultiplayerOptimizerConfig());
+
+        // 注册自定义 act（必须在 PatchAll 之前，因为 ExpandActListPatch 引用 Bootstrap 里的实例）
+        ExtraActsBootstrap.Initialize();
 
         Harmony harmony = new(ModId);
         harmony.PatchAll();
