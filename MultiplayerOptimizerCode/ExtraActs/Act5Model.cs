@@ -27,6 +27,9 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///     直接从 act1+2+3 boss 池构造混合 list 填进 normalEncounters/eliteEncounters
 ///
 /// Event 池：跟 Act4 同样，用 BuildWeightedFlatList 加权混合 act1+2+3 的事件池。
+///
+/// Ancient 池：复用 Glory。这是必需的——map 起始节点是 MapPointType.Ancient，渲染时需要
+/// _runState.Act.Ancient 不为 null，否则进入 act 时 UI 卡死。
 /// </summary>
 public class Act5Model : CustomActModel
 {
@@ -77,12 +80,13 @@ public class Act5Model : CustomActModel
         }
     }
 
+    // Ancient 池：复用 Glory（同 Act4 注释，避免起始节点崩）
     public override IEnumerable<AncientEventModel> AllAncients =>
-        Array.Empty<AncientEventModel>();
+        ModelDb.Act<Glory>().AllAncients;
 
     public override IEnumerable<AncientEventModel> GetUnlockedAncients(UnlockState state)
     {
-        return Array.Empty<AncientEventModel>();
+        return ModelDb.Act<Glory>().GetUnlockedAncients(state);
     }
 
     protected override int BaseNumberOfRooms => 13;

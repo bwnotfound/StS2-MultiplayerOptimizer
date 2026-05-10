@@ -28,8 +28,11 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///     这样 act.AllBossEncounters（继承自 ActModel 的 filter 属性）自带权重，
 ///     DeduplicateCustomActBossesPatch 用 rng.NextItem 抽样时等价加权抽样
 ///
-/// Event 池（在本类中处理）：
-///   - 用 EncounterListBuilder.BuildWeightedFlatList 加权混合 act1+2+3 的事件池
+/// Event 池：用 EncounterListBuilder.BuildWeightedFlatList 加权混合 act1+2+3 的事件池。
+///
+/// Ancient 池：复用 Glory（每个 act 的起始节点都是 MapPointType.Ancient，UI 渲染为 NAncientMapPoint，
+/// 它在 _Ready 里需要读 _runState.Act.Ancient.MapIcon。如果 AllAncients 为空，
+/// _rooms.Ancient 会未填充，渲染时 NullReferenceException 卡住地图）。
 ///
 /// 顶端 boss 不与前 3 层 boss 重复，由 DeduplicateCustomActBossesPatch 保证。
 /// </summary>
@@ -104,12 +107,14 @@ public class Act4Model : CustomActModel
         }
     }
 
+    // Ancient 池：复用 Glory。这是必需的——map 起始节点是 MapPointType.Ancient，
+    // 渲染时需要 _runState.Act.Ancient 不为 null。返回空集合会导致进入 act 时卡死。
     public override IEnumerable<AncientEventModel> AllAncients =>
-        Array.Empty<AncientEventModel>();
+        ModelDb.Act<Glory>().AllAncients;
 
     public override IEnumerable<AncientEventModel> GetUnlockedAncients(UnlockState state)
     {
-        return Array.Empty<AncientEventModel>();
+        return ModelDb.Act<Glory>().GetUnlockedAncients(state);
     }
 
     protected override int BaseNumberOfRooms => 13;

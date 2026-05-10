@@ -71,16 +71,16 @@ public sealed class ConfigSyncMessage : ICustomMessage
     {
         Doubles.Clear();
         Bools.Clear();
-        int dc = reader.ReadInt();
-        for (int i = 0; i < dc; i++)
+        var dc = reader.ReadInt();
+        for (var i = 0; i < dc; i++)
         {
             var k = reader.ReadString();
             var v = reader.ReadDouble();
             Doubles[k] = v;
         }
 
-        int bc = reader.ReadInt();
-        for (int i = 0; i < bc; i++)
+        var bc = reader.ReadInt();
+        for (var i = 0; i < bc; i++)
         {
             var k = reader.ReadString();
             var v = reader.ReadBool();
