@@ -13,7 +13,7 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///   - host 在 BeginRunForAllPlayers 之前调 CaptureCurrent() 构造消息，broadcast
 ///   - 因为传输是 reliable+ordered，client 一定在 LobbyBeginRunMessage 之前收到这条
 ///   - client HandleMessage 把字段值 apply 到本地静态字段（不写磁盘）
-///   - run 结束时（RunManager.CleanUpRun postfix）调 ConfigSyncManager.Restore 从磁盘
+///   - run 结束时（RunManager.CleanUp postfix）调 ConfigSyncManager.Restore 从磁盘
 ///     reload 恢复 client 原配置
 ///
 /// 序列化用 (字段名, 值) 字典而不是固定顺序数组——这样 mod 版本之间字段增删时也能容错：
@@ -71,16 +71,16 @@ public sealed class ConfigSyncMessage : ICustomMessage
     {
         Doubles.Clear();
         Bools.Clear();
-        var dc = reader.ReadInt();
-        for (var i = 0; i < dc; i++)
+        int dc = reader.ReadInt();
+        for (int i = 0; i < dc; i++)
         {
             var k = reader.ReadString();
             var v = reader.ReadDouble();
             Doubles[k] = v;
         }
 
-        var bc = reader.ReadInt();
-        for (var i = 0; i < bc; i++)
+        int bc = reader.ReadInt();
+        for (int i = 0; i < bc; i++)
         {
             var k = reader.ReadString();
             var v = reader.ReadBool();
@@ -89,10 +89,10 @@ public sealed class ConfigSyncMessage : ICustomMessage
     }
 
     /// <summary>
-    /// 收到消息时被调用。BaseLib 此版本接口签名无参，host 是否拿到 senderId 由 BaseLib 决定；
-    /// 我们用 ConfigSyncManager.IsLocalHost() 判断 host 跳过 echo。
+    /// 收到消息时被调用（BaseLib 3.1.2+ 接口签名带 senderId）。
+    /// 我们不依赖 senderId，用 ConfigSyncManager.IsLocalHost() 判断 host 跳过 echo。
     /// </summary>
-    public void HandleMessage()
+    public void HandleMessage(ulong senderId)
     {
         // host 不接收自己 broadcast（如果 BaseLib 有 echo back，IsLocalHost 拦掉）
         if (ConfigSyncManager.IsLocalHost())
