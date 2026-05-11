@@ -24,7 +24,7 @@ internal static class SourceActResolver
     {
         if (encounter == null) return null;
         var cache = GetOrBuildCache();
-        return cache.TryGetValue(encounter.Id.Entry, out int idx) ? idx : null;
+        return cache.TryGetValue(encounter.Id.Entry, out var idx) ? idx : null;
     }
 
     private static Dictionary<string, int> GetOrBuildCache()
@@ -41,10 +41,7 @@ internal static class SourceActResolver
 
     private static void AddAct(Dictionary<string, int> cache, ActModel act, int idx)
     {
-        foreach (var e in act.AllEncounters)
-        {
-            cache.TryAdd(e.Id.Entry, idx);
-        }
+        foreach (var e in act.AllEncounters) cache.TryAdd(e.Id.Entry, idx);
     }
 }
 
@@ -62,7 +59,7 @@ internal static class DifficultyMultiplierContext
         else if (state.Act is Act5Model) actIdx = 5;
         else return (1.0, 1.0);
 
-        bool isBossNode = IsAtFinalBossNode(state);
+        var isBossNode = IsAtFinalBossNode(state);
 
         double globalHp, globalDmg;
         if (isBossNode)
@@ -72,7 +69,7 @@ internal static class DifficultyMultiplierContext
         }
         else
         {
-            double progress = GetActProgress(state);
+            var progress = GetActProgress(state);
             globalHp = ExtraActsConfig.GetNormalEnemyHpMult(actIdx).Lerp(progress);
             globalDmg = ExtraActsConfig.GetNormalEnemyDmgMult(actIdx).Lerp(progress);
         }
@@ -104,8 +101,8 @@ internal static class DifficultyMultiplierContext
 
     private static double GetActProgress(IRunState state)
     {
-        int actFloor = state.ActFloor;
-        int totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
+        var actFloor = state.ActFloor;
+        var totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
         if (totalRooms <= 0) return 0;
         return Math.Clamp((double)actFloor / totalRooms, 0.0, 1.0);
     }
@@ -133,7 +130,7 @@ public static class MonsterHpMultiplierPatch
         if (Math.Abs(hpMult - 1.0) < 1e-6) return;
 
         // 用 decimal 计算并 clamp，避免极端值溢出 int 范围
-        decimal scaled = (decimal)__result.MaxHp * (decimal)hpMult;
+        var scaled = (decimal)__result.MaxHp * (decimal)hpMult;
         if (scaled > MonsterRuntimeHpHelper.HpAmountCeiling) scaled = MonsterRuntimeHpHelper.HpAmountCeiling;
         if (scaled < 1m) scaled = 1m;
 

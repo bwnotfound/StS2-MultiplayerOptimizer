@@ -44,16 +44,16 @@ public static class DeduplicateCustomActAncientsPatch
 
         var usedAncientIds = new HashSet<string>();
 
-        for (int i = 0; i < state.Acts.Count; i++)
+        for (var i = 0; i < state.Acts.Count; i++)
         {
             var act = state.Acts[i];
             var rooms = RoomsField?.GetValue(act) as RoomSet;
             if (rooms == null || !rooms.HasAncient) continue;
 
-            string currentId = rooms.Ancient.Id.Entry;
+            var currentId = rooms.Ancient.Id.Entry;
 
             // 只对 custom act 重抽；act1-3 / 其他 base act 保持原结果（但仍把它们的 ancient 加入 used set）
-            bool isCustomAct = act is Act4Model || act is Act5Model;
+            var isCustomAct = act is Act4Model || act is Act5Model;
 
             if (isCustomAct && usedAncientIds.Contains(currentId))
             {

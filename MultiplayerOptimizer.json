@@ -3,7 +3,7 @@
   "name": "MultiplayerOptimizer",
   "author": "bwnotfound",
   "description": "Some awesome function for mulityplay mode",
-  "version": "v0.1.0",
+  "version": "0.3.0",
   "has_pck": true,
   "has_dll": true,
   "dependencies": [

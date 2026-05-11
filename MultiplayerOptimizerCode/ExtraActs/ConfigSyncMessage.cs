@@ -12,12 +12,15 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 /// 流程：
 ///   - host 在 BeginRunForAllPlayers 之前调 CaptureCurrent() 构造消息，broadcast
 ///   - 因为传输是 reliable+ordered，client 一定在 LobbyBeginRunMessage 之前收到这条
-///   - client HandleMessage 把字段值 apply 到本地静态字段（不写磁盘）
+///   - client HandleMessage 把字段值 apply 到本地静态字段（不写磁盘），然后回 ConfigSyncAckMessage
+///   - host 端等待所有 client ack；超时则 popup 拒绝开 run（见 MultiplayerSyncPatches）
 ///   - run 结束时（RunManager.CleanUp postfix）调 ConfigSyncManager.Restore 从磁盘
 ///     reload 恢复 client 原配置
 ///
 /// 序列化用 (字段名, 值) 字典而不是固定顺序数组——这样 mod 版本之间字段增删时也能容错：
 /// 反序列化时找不到对应 property 的 key 会被 ignore；缺失的 key 保持 client 当前值。
+/// SyncId 和 HostModVersion 是 v0.2.0 新增字段，旧 client 拿不到这条消息（没 wrapper handler），
+/// 所以不需要 wire-format 后向兼容。
 ///
 /// 注意 ShouldBuffer = false：BaseLib 默认 buffer 用于 in-game 消息，我们这条是 lobby 期，
 /// 不能 buffer 否则会被推迟到 run 启动后处理——那时 BeginRunLocally 已经跑完了。
@@ -27,6 +30,12 @@ public sealed class ConfigSyncMessage : ICustomMessage
     public Dictionary<string, double> Doubles { get; } = new();
     public Dictionary<string, bool> Bools { get; } = new();
 
+    /// <summary>host 端分配的 sync 标识，client ack 时回带，host 用来匹配 pending 状态。</summary>
+    public ulong SyncId { get; set; }
+
+    /// <summary>host 的 mod 版本号，仅用于 log 和 popup 显示，不参与计算。</summary>
+    public string HostModVersion { get; set; } = "";
+
     public bool ShouldBroadcast => true;
     public bool ShouldBuffer => false; // lobby 阶段消息，不 buffer
     public NetTransferMode Mode => NetTransferMode.Reliable;
@@ -34,7 +43,10 @@ public sealed class ConfigSyncMessage : ICustomMessage
     /// <summary>构造一条消息，把当前 MultiplayerOptimizerConfig 的所有 static double/bool 字段塞进去。</summary>
     public static ConfigSyncMessage CaptureCurrent()
     {
-        var msg = new ConfigSyncMessage();
+        var msg = new ConfigSyncMessage
+        {
+            HostModVersion = MainFile.ModVersion
+        };
         var props = typeof(MultiplayerOptimizerConfig)
             .GetProperties(BindingFlags.Public | BindingFlags.Static);
 
@@ -52,6 +64,9 @@ public sealed class ConfigSyncMessage : ICustomMessage
 
     public void Serialize(PacketWriter writer)
     {
+        writer.WriteULong(SyncId);
+        writer.WriteString(HostModVersion);
+
         writer.WriteInt(Doubles.Count);
         foreach (var kv in Doubles)
         {
@@ -71,6 +86,10 @@ public sealed class ConfigSyncMessage : ICustomMessage
     {
         Doubles.Clear();
         Bools.Clear();
+
+        SyncId = reader.ReadULong();
+        HostModVersion = reader.ReadString();
+
         var dc = reader.ReadInt();
         for (var i = 0; i < dc; i++)
         {
@@ -89,18 +108,18 @@ public sealed class ConfigSyncMessage : ICustomMessage
     }
 
     /// <summary>
-    /// 收到消息时被调用（BaseLib 3.1.2+ 接口签名带 senderId）。
-    /// 我们不依赖 senderId，用 ConfigSyncManager.IsLocalHost() 判断 host 跳过 echo。
+    /// Client 端收到时调用——apply 配置到本地静态字段，然后回 ack 给 host。
+    /// Host 端自己 broadcast 时如果 BaseLib echo back（通常不会）会被 IsLocalHost 跳过。
     /// </summary>
     public void HandleMessage(ulong senderId)
     {
-        // host 不接收自己 broadcast（如果 BaseLib 有 echo back，IsLocalHost 拦掉）
         if (ConfigSyncManager.IsLocalHost())
         {
             MainFile.Logger.Info("[Sync] Host received own config sync message, ignored");
             return;
         }
 
-        ConfigSyncManager.Apply(this);
+        var result = ConfigSyncManager.Apply(this);
+        ConfigSyncManager.SendAck(SyncId, result);
     }
 }

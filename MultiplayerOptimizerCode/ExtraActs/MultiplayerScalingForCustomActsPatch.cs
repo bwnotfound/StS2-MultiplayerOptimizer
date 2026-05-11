@@ -37,7 +37,7 @@ public static class MultiplayerScalingForCustomActsPatch
         if (actIndex <= 2) return true;
 
         // act4/5 沿用 act3 的系数：boss 1.3×，其他 1.2×
-        __result = (encounter != null && encounter.RoomType == RoomType.Boss) ? 1.3m : 1.2m;
+        __result = encounter != null && encounter.RoomType == RoomType.Boss ? 1.3m : 1.2m;
         return false; // skip 原方法
     }
 }

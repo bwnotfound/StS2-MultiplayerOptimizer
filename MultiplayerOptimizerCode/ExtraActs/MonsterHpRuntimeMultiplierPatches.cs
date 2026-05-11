@@ -63,7 +63,7 @@ internal static class MonsterRuntimeHpHelper
         // SetMaxAndCurrentHp(OriginalHp) 这种 reset 调用传的是已加倍值，不能再加倍
         if (creature.ShowsInfiniteHp) return false;
 
-        double mult = GetHpMult(creature);
+        var mult = GetHpMult(creature);
         if (Math.Abs(mult - 1.0) < 1e-6) return false;
 
         scaled = originalAmount * (decimal)mult;
