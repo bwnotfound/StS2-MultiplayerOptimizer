@@ -1,8 +1,11 @@
+using System;
+using System.Linq;
+using System.Reflection;
 using BaseLib.Config;
-using BaseLib.Utils;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
+using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode;
@@ -12,52 +15,30 @@ public partial class MainFile : Node
 {
     public const string ModId = "MultiplayerOptimizer";
 
-    /// <summary>
-    /// 当前 mod 版本号。**单一数据源是 MultiplayerOptimizer.json 的 "version" 字段**，
-    /// 这里运行时通过 ModManager 反查避免两处版本号需要手动同步。
-    ///
-    /// 为什么不写成常量：base game 多人加入时（JoinFlow.cs:82）拼 "&lt;mod_id&gt;-&lt;manifest.version&gt;"
-    /// 跟 host 对比，如果两个玩家的 manifest 字符串不完全一致就拒绝加入。如果代码里维护一个常量、
-    /// json 里维护另一个字符串，两者很容易漂移导致 ModMismatch。
-    ///
-    /// 修改 mod 版本：**只改 MultiplayerOptimizer.json 的 "version" 字段**，代码无需任何改动。
-    ///
-    /// 缓存策略：**只缓存有效值**。如果某次返回 "unknown"（不应该，因为已用 ModManager.Mods 而非
-    /// GetLoadedMods），下次还会重试——避免一次失败永久 stuck 在 unknown。
-    /// </summary>
+    // ModVersion 运行时从 manifest 读，避免代码 const 跟 manifest 漂移。
+    // 只缓存有效值——查不到时不缓存 "unknown"，允许后续重试。
+    private static string? _cachedModVersion;
+
     public static string ModVersion
     {
         get
         {
             if (_cachedModVersion != null) return _cachedModVersion;
-            var v = ResolveModVersion();
-            if (v != "unknown") _cachedModVersion = v;
-            return v;
-        }
-    }
+            try
+            {
+                var info = ModManager.Mods?.FirstOrDefault(m => m?.manifest?.id == ModId);
+                var v = info?.manifest?.version;
+                if (!string.IsNullOrEmpty(v))
+                {
+                    _cachedModVersion = v;
+                    return v;
+                }
+            }
+            catch
+            {
+                // 不缓存，让下次重试
+            }
 
-    private static string? _cachedModVersion;
-
-    private static string ResolveModVersion()
-    {
-        try
-        {
-            // 不用 GetLoadedMods()——它过滤 state == Loaded，但 mod 自己的 Initialize() 期间
-            // 自己的 state 可能还没标记为 Loaded（mod loader 顺序：load DLL → 调 Initializer →
-            // 标记 Loaded），会导致版本读不到。用 ModManager.Mods（所有 mods）更稳。
-            foreach (var mod in ModManager.Mods)
-                if (mod.manifest?.id == ModId)
-                    return mod.manifest.version ?? "unknown";
-
-            // 找不到自己——理论上不应该发生，manifest 在 mod detection 阶段就被读取了
-            Logger.Warn(
-                $"[Init] Could not find own manifest in ModManager.Mods. " +
-                "ConfigSync version check will report 'unknown'.");
-            return "unknown";
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"[Init] Failed to resolve mod version from manifest: {ex.Message}");
             return "unknown";
         }
     }
@@ -67,15 +48,72 @@ public partial class MainFile : Node
 
     public static void Initialize()
     {
-        // 启动时输出版本号到 log，方便排查跨玩家版本不一致问题
         Logger.Info($"[Init] Loading {ModId} version {ModVersion}");
 
         ModConfigRegistry.Register(ModId, new MultiplayerOptimizerConfig());
-
-        // 必须在 PatchAll 之前——ExpandActListPatch 引用 Bootstrap 里的实例
         ExtraActsBootstrap.Initialize();
 
         Harmony harmony = new(ModId);
-        harmony.PatchAll();
+
+        // ============================================================
+        // PatchAll + 诊断
+        // 临时附加：暴露 Harmony 是否 silent-miss 某些 patch（如 lobby ctor）
+        // 朋友机器上 EarlyRegister postfix 没跑，需要 log 来锁定具体原因。
+        // 排查完毕后这一整段可以删掉。
+        // ============================================================
+        try
+        {
+            harmony.PatchAll();
+            Logger.Info("[Diagnostic] Harmony PatchAll completed without throwing");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[Diagnostic] Harmony PatchAll THREW: {ex}");
+        }
+
+        // 诊断 1: 列出 Harmony 实际绑定到的方法。
+        // 如果 StartRunLobby/LoadRunLobby 的 ctor 不在列表 = patch 没绑上（silent miss）
+        try
+        {
+            var patched = harmony.GetPatchedMethods().ToList();
+            Logger.Info($"[Diagnostic] Harmony bound {patched.Count} method(s):");
+            foreach (var m in patched)
+            {
+                var cls = m.DeclaringType?.FullName ?? "?";
+                var name = m is ConstructorInfo ? ".ctor" : m.Name;
+                var sig = string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name));
+                Logger.Info($"[Diagnostic]   - {cls}::{name}({sig})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[Diagnostic] GetPatchedMethods failed: {ex}");
+        }
+
+        // 诊断 2: 朋友 base game 实际的 StartRunLobby / LoadRunLobby ctor 签名。
+        // 如果 dev 反编译版本跟朋友 v0.103.2 不一致，签名会不同 →
+        // [HarmonyPatch(MethodType.Constructor, new[] {...})] 没法 bind
+        DiagnoseCtorSignatures(typeof(StartRunLobby));
+        DiagnoseCtorSignatures(typeof(LoadRunLobby));
+    }
+
+    private static void DiagnoseCtorSignatures(Type t)
+    {
+        try
+        {
+            var ctors = t.GetConstructors(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Logger.Info($"[Diagnostic] {t.FullName} has {ctors.Length} ctor(s):");
+            foreach (var c in ctors)
+            {
+                var sig = string.Join(", ",
+                    c.GetParameters().Select(p => p.ParameterType.FullName));
+                Logger.Info($"[Diagnostic]   {t.Name}({sig})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[Diagnostic] DiagnoseCtorSignatures({t.FullName}) failed: {ex}");
+        }
     }
 }

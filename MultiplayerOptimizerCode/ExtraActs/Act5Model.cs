@@ -31,6 +31,9 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///
 /// Ancient 池：复用 Glory。这是必需的——map 起始节点是 MapPointType.Ancient，渲染时需要
 /// _runState.Act.Ancient 不为 null，否则进入 act 时 UI 卡死。
+///
+/// 顶端最终 boss 不与前 4 层 boss 重复 + 应用 boss 池过滤开关（如 ExcludeDoormakerFromBossPool）
+/// 由 DeduplicateCustomActBossesPatch 保证。
 /// </summary>
 public class Act5Model : CustomActModel
 {
@@ -62,11 +65,11 @@ public class Act5Model : CustomActModel
     // 关键：基础池 = Glory.AllEncounters，不混合 boss
     // Act5 最终 boss 必须从 act3 boss 池抽（需求 5.3）
     //
-    // ApplyBossPoolFilters 在这里只剔除 boss 类型中开关命中的 encounter（默认 Doormaker），
-    // 普通战斗/精英战斗的 encounter 不受影响——是按 type check 过滤的。
+    // 注意这里**不**调用 ApplyBossPoolFilters——AllEncounters 是 lazy 缓存（mod 加载时跑一次后定型），
+    // 在这里过滤会让运行时的开关变化不生效。boss 池过滤放在 DeduplicateCustomActBossesPatch 里做。
     public override IEnumerable<EncounterModel> GenerateAllEncounters()
     {
-        return ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Glory>().AllEncounters);
+        return ModelDb.Act<Glory>().AllEncounters;
     }
 
     public override IEnumerable<EventModel> AllEvents
