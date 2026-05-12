@@ -91,11 +91,9 @@ internal static class ConfigSyncManager
 
         // 版本对比 log——方便用户排查
         if (msg.HostModVersion != MainFile.ModVersion)
-        {
             MainFile.Logger.Warn(
                 $"[Sync] Mod version mismatch: host='{msg.HostModVersion}' vs me='{MainFile.ModVersion}'. " +
                 "Trying to apply host config field-by-field; unknown fields will be ignored.");
-        }
 
         var doublesApplied = 0;
         var doublesSkipped = 0;
@@ -154,7 +152,7 @@ internal static class ConfigSyncManager
             AppliedDoubles = doublesApplied,
             SkippedDoubles = doublesSkipped,
             AppliedBools = boolsApplied,
-            SkippedBools = boolsSkipped,
+            SkippedBools = boolsSkipped
         };
     }
 
@@ -177,7 +175,7 @@ internal static class ConfigSyncManager
             AppliedDoubles = result.AppliedDoubles,
             SkippedDoubles = result.SkippedDoubles,
             AppliedBools = result.AppliedBools,
-            SkippedBools = result.SkippedBools,
+            SkippedBools = result.SkippedBools
         };
         net.SendMessage(new CustomMessageWrapper { Message = ack });
         MainFile.Logger.Info($"[Sync] Sent ack for syncId={syncId} to host");
@@ -248,10 +246,7 @@ internal static class ConfigSyncManager
         };
         _pendingSyncs[syncId] = pending;
 
-        if (pending.RemainingClients.Count == 0)
-        {
-            pending.Completion.TrySetResult(true);
-        }
+        if (pending.RemainingClients.Count == 0) pending.Completion.TrySetResult(true);
 
         return syncId;
     }
@@ -280,10 +275,7 @@ internal static class ConfigSyncManager
             $"[Sync] Received ack for syncId={ack.SyncId} from {senderId} version={versionStr}, " +
             $"applied {ack.AppliedDoubles}D+{ack.AppliedBools}B, skipped {ack.SkippedDoubles}D+{ack.SkippedBools}B");
 
-        if (pending.RemainingClients.Count == 0)
-        {
-            pending.Completion.TrySetResult(true);
-        }
+        if (pending.RemainingClients.Count == 0) pending.Completion.TrySetResult(true);
     }
 
     /// <summary>
@@ -292,10 +284,7 @@ internal static class ConfigSyncManager
     /// </summary>
     public static async Task<AckResult> WaitForAcksAsync(ulong syncId, int timeoutMs)
     {
-        if (!_pendingSyncs.TryGetValue(syncId, out var pending))
-        {
-            return new AckResult { AllAcked = false };
-        }
+        if (!_pendingSyncs.TryGetValue(syncId, out var pending)) return new AckResult { AllAcked = false };
 
         try
         {
@@ -307,7 +296,7 @@ internal static class ConfigSyncManager
             {
                 AllAcked = allAcked,
                 MissingClients = new List<ulong>(pending.RemainingClients),
-                ReceivedAcks = new Dictionary<ulong, ConfigSyncAckMessage>(pending.ReceivedAcks),
+                ReceivedAcks = new Dictionary<ulong, ConfigSyncAckMessage>(pending.ReceivedAcks)
             };
         }
         finally
@@ -317,5 +306,8 @@ internal static class ConfigSyncManager
     }
 
     /// <summary>测试钩子：检查指定 syncId 的 pending 是否存在（防止单元测试或调试需要）。</summary>
-    public static bool HasPending(ulong syncId) => _pendingSyncs.ContainsKey(syncId);
+    public static bool HasPending(ulong syncId)
+    {
+        return _pendingSyncs.ContainsKey(syncId);
+    }
 }

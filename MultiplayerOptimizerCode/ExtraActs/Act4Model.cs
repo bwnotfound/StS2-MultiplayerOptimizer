@@ -30,7 +30,7 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///
 /// Event 池：用 EncounterListBuilder.BuildWeightedFlatList 加权混合 act1+2+3 的事件池。
 ///
-/// Ancient 池：复用 Glory（每个 act 的起始节点都是 MapPointType.Ancient，UI 渲染为 NAncientMapPoint，
+/// Ancient 池：复用 Glory（每个 act 的起始节点都是 MapPointType.Ancient，UI 渲染为 NAncientMapPoint,
 /// 它在 _Ready 里需要读 _runState.Act.Ancient.MapIcon。如果 AllAncients 为空，
 /// _rooms.Ancient 会未填充，渲染时 NullReferenceException 卡住地图）。
 ///
@@ -79,12 +79,13 @@ public class Act4Model : CustomActModel
                 result.Add(e);
 
         // 2) Boss encounters: 按权重重复添加 act1+2+3 的 boss
+        // ApplyBossPoolFilters 处理 ExcludeDoormakerFromBossPool 等开关——只对 boss 类型 encounter 起作用
         var bossWeights = ExtraActsConfig.GetBossWeights(4);
         var weightedBossPools = new List<(IReadOnlyList<EncounterModel>, double)>
         {
-            (ModelDb.Act<Overgrowth>().AllBossEncounters.ToList(), bossWeights.Act1),
-            (ModelDb.Act<Hive>().AllBossEncounters.ToList(), bossWeights.Act2),
-            (ModelDb.Act<Glory>().AllBossEncounters.ToList(), bossWeights.Act3)
+            (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Overgrowth>().AllBossEncounters), bossWeights.Act1),
+            (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Hive>().AllBossEncounters), bossWeights.Act2),
+            (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Glory>().AllBossEncounters), bossWeights.Act3)
         };
         // baseFactor 取较小值（30）避免 boss 列表过长——boss 抽样只需要权重比例正确即可
         result.AddRange(EncounterListBuilder.BuildWeightedFlatList(weightedBossPools, 30));

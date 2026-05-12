@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Models.Acts;
 using MegaCrit.Sts2.Core.Models.Encounters;
 using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Random;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Unlocks;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
@@ -58,11 +59,14 @@ public class Act5Model : CustomActModel
 
     public override string AmbientSfx => "event:/sfx/ambience/act3_ambience";
 
-    // 关键：保持 = Glory.AllEncounters，不混合 boss
+    // 关键：基础池 = Glory.AllEncounters，不混合 boss
     // Act5 最终 boss 必须从 act3 boss 池抽（需求 5.3）
+    //
+    // ApplyBossPoolFilters 在这里只剔除 boss 类型中开关命中的 encounter（默认 Doormaker），
+    // 普通战斗/精英战斗的 encounter 不受影响——是按 type check 过滤的。
     public override IEnumerable<EncounterModel> GenerateAllEncounters()
     {
-        return ModelDb.Act<Glory>().AllEncounters;
+        return ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Glory>().AllEncounters);
     }
 
     public override IEnumerable<EventModel> AllEvents

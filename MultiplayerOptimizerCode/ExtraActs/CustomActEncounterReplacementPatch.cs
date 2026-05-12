@@ -19,6 +19,8 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///   - Act5: 重新填充 normalEncounters + eliteEncounters，
 ///           都从 (act1.bosses, act2.bosses, act3.bosses) 按 boss 权重混合
 ///           （act5 中部所有战斗节点都打 boss 内容；顶端 BossMapPoint 由 _rooms.Boss 单独控制，不受影响）
+///           Act5 的 boss 混合池经过 ExtraActsConfig.ApplyBossPoolFilters 过滤，应用如
+///           ExcludeDoormakerFromBossPool 等开关。Act4 的 elite 池不过滤——开关只影响 boss 池。
 ///
 /// 实现：patch ActModel.GenerateRooms postfix，反射访问 protected 字段 _rooms 拿到 RoomSet，
 ///       用 EncounterListBuilder.FillWithWeightedPools 填充 list。
@@ -48,6 +50,7 @@ public static class CustomActEncounterReplacementPatch
         if (__instance is Act4Model)
         {
             // Act4: elite 内容用加权混合的 1+2+3 elite encounters 填充
+            // 不过滤 boss 池开关——这里用的是 elite 池
             var w = ExtraActsConfig.GetEncounterWeights(4);
             var pools = new List<(IReadOnlyList<EncounterModel>, double)>
             {
@@ -67,12 +70,13 @@ public static class CustomActEncounterReplacementPatch
         else if (__instance is Act5Model)
         {
             // Act5: normal + elite 内容都用加权混合的 1+2+3 boss encounters 填充
+            // 经过 ApplyBossPoolFilters 应用 ExcludeDoormakerFromBossPool 等 boss 池过滤开关
             var w = ExtraActsConfig.GetBossWeights(5);
             var pools = new List<(IReadOnlyList<EncounterModel>, double)>
             {
-                (ModelDb.Act<Overgrowth>().AllBossEncounters.ToList(), w.Act1),
-                (ModelDb.Act<Hive>().AllBossEncounters.ToList(), w.Act2),
-                (ModelDb.Act<Glory>().AllBossEncounters.ToList(), w.Act3)
+                (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Overgrowth>().AllBossEncounters), w.Act1),
+                (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Hive>().AllBossEncounters), w.Act2),
+                (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Glory>().AllBossEncounters), w.Act3)
             };
 
             var normalCount = rooms.normalEncounters.Count;

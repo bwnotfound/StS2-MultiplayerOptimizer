@@ -164,4 +164,14 @@ internal class MultiplayerOptimizerConfig : SimpleModConfig
     [ConfigSection("BehaviorToggles")] public static bool Act5_ShowDisguisedBossWarning { get; set; } = true;
 
     public static bool Act5_AvoidFinalBossEqualPenultimate { get; set; } = true;
+
+    /// <summary>
+    /// 是否从第 4、5 层 boss 池中去除门扉缔造者（Doormaker）。
+    ///
+    /// 开启后影响三处：
+    ///   1. Act4 顶部 boss 抽样（Act4Model.GenerateAllEncounters 构造的 boss 池）
+    ///   2. Act5 中部所有战斗（CustomActEncounterReplacementPatch 用的 act1/2/3 boss 混合池）
+    ///   3. Act5 顶部最终 boss（Act5Model.GenerateAllEncounters 复用的 Glory.AllEncounters）
+    /// </summary>
+    public static bool ExcludeDoormakerFromBossPool { get; set; } = false;
 }

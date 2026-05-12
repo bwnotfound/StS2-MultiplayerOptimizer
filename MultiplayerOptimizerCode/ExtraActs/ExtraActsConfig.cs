@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using MegaCrit.Sts2.Core.Models;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 
@@ -214,4 +217,88 @@ internal static class ExtraActsConfig
 
     public static bool ShouldAvoidAct5FinalBossEqualPenultimate =>
         MultiplayerOptimizerConfig.Act5_AvoidFinalBossEqualPenultimate;
+
+    // ============================================================
+    // Boss 池过滤
+    // ============================================================
+    //
+    // ## 设计目标
+    // 让"开关 → 该开关启用时要从 boss 池排除哪些 encounter"的映射跟 base game 的具体 EncounterModel
+    // 子类**完全解耦**：
+    //   - **编译期解耦**：mod 不 reference 任何具体的 EncounterModel 子类型（如 DoormakerBoss），
+    //     即使将来 base game 删除这些类型，mod 也能正常编译。
+    //   - **运行期容错**：用字符串 ID (Id.Entry) 匹配；如果 base game 那个 encounter 实际不存在了，
+    //     字符串永远匹配不到 → filter 是 no-op → 既不崩溃也不影响其他 boss 抽样。
+    //
+    // ## 注册新过滤开关的步骤
+    // 1. 在 MultiplayerOptimizerConfig.cs 加 `public static bool` 字段
+    // 2. 在 _exclusions 数组里加一行 BossPoolExclusion
+    // 3. 完。Act4Model / Act5Model / CustomActEncounterReplacementPatch 三处调用点无需改动
+    //
+    // ## 关于 Id.Entry 的字符串值
+    // base game 的 ModelDb.GetEntry 用 StringHelper.Slugify(type.Name) 生成 ID:
+    //   - CamelCase 拆分为下划线分隔
+    //   - 大写化
+    //   - 移除特殊字符
+    // 即 `DoormakerBoss` 类的 Id.Entry == "DOORMAKER_BOSS"。
+    //
+    // 想确认某个 boss 的精确 ID 字符串，看其在 log 里的 encounter ID（如 "SOUL_NEXUS_ELITE"）
+    // 或者直接对类名跑 Slugify。
+
+    /// <summary>
+    /// 一条 boss 池过滤规则：当 <see cref="IsEnabled"/> 返回 true 时，
+    /// <see cref="ExcludedEntries"/> 列出的 Id.Entry 会从所有 boss 池中被剔除。
+    /// </summary>
+    /// <param name="Description">用于 log/调试的可读名字，不影响匹配逻辑。</param>
+    private sealed record BossPoolExclusion(
+        Func<bool> IsEnabled,
+        string[] ExcludedEntries,
+        string Description);
+
+    /// <summary>所有注册的 boss 池过滤规则。新增过滤开关在这里追加一行 tuple 即可。</summary>
+    private static readonly BossPoolExclusion[] _exclusions =
+    {
+        new(
+            () => MultiplayerOptimizerConfig.ExcludeDoormakerFromBossPool,
+            new[] { "DOORMAKER_BOSS" },
+            "Doormaker")
+        // 未来加新 boss 排除：
+        // new(() => MultiplayerOptimizerConfig.ExcludeQueenFromBossPool,
+        //     new[] { "QUEEN_BOSS" }, "Queen"),
+    };
+
+    /// <summary>
+    /// 把所有启用的 boss 池过滤规则应用到一个 encounter 序列。
+    ///
+    /// 适用场景：
+    ///   - Act4 顶部 boss 抽样池
+    ///   - Act5 中部所有战斗用的 act1/2/3 boss 混合池
+    ///   - Act5 顶部最终 boss 抽样池（即 Glory.AllEncounters 中的 boss 部分）
+    ///
+    /// 对非 boss encounter 不影响（只按 Id.Entry 字符串匹配，普通战斗/精英战斗的 ID 不会跟
+    /// boss 排除列表里的 ID 撞）。
+    /// </summary>
+    public static List<EncounterModel> ApplyBossPoolFilters(IEnumerable<EncounterModel> source)
+    {
+        var list = source as List<EncounterModel> ?? source.ToList();
+
+        // 收集当前所有启用规则对应的排除 ID
+        HashSet<string>? excluded = null;
+        foreach (var rule in _exclusions)
+        {
+            if (!rule.IsEnabled()) continue;
+            excluded ??= new HashSet<string>(StringComparer.Ordinal);
+            foreach (var id in rule.ExcludedEntries) excluded.Add(id);
+        }
+
+        if (excluded == null) return list; // 所有过滤开关都关闭 → 跳过 enumeration
+
+        // Id 可能为 null（未注册的 encounter），保守不过滤；
+        // 只有 Id.Entry 命中排除列表才剔除。
+        return list.Where(e =>
+        {
+            var entry = e.Id?.Entry;
+            return entry == null || !excluded.Contains(entry);
+        }).ToList();
+    }
 }

@@ -46,12 +46,8 @@ public partial class MainFile : Node
             // 自己的 state 可能还没标记为 Loaded（mod loader 顺序：load DLL → 调 Initializer →
             // 标记 Loaded），会导致版本读不到。用 ModManager.Mods（所有 mods）更稳。
             foreach (var mod in ModManager.Mods)
-            {
                 if (mod.manifest?.id == ModId)
-                {
                     return mod.manifest.version ?? "unknown";
-                }
-            }
 
             // 找不到自己——理论上不应该发生，manifest 在 mod detection 阶段就被读取了
             Logger.Warn(
@@ -59,7 +55,7 @@ public partial class MainFile : Node
                 "ConfigSync version check will report 'unknown'.");
             return "unknown";
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             Logger.Error($"[Init] Failed to resolve mod version from manifest: {ex.Message}");
             return "unknown";

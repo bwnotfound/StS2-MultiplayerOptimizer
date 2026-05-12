@@ -66,10 +66,8 @@ internal static class ConfigSyncFlow
         var clientIds = connectedPlayerIds.Where(id => id != hostId).ToList();
 
         if (clientIds.Count == 0)
-        {
             // host 自己一个人——跳过 sync 直接开 run
             return true;
-        }
 
         // 注册 pending + broadcast sync
         var msg = ConfigSyncMessage.CaptureCurrent();
@@ -113,21 +111,15 @@ internal static class ConfigSyncFlow
                 .ToList();
 
             if (versionMismatches.Count > 0)
-            {
                 foreach (var (id, ack) in versionMismatches)
-                {
                     MainFile.Logger.Warn(
                         $"[Sync] Client {id} version='{ack.ClientModVersion}' differs from host='{MainFile.ModVersion}'. " +
                         $"Applied {ack.AppliedDoubles}D+{ack.AppliedBools}B / Skipped {ack.SkippedDoubles}D+{ack.SkippedBools}B. " +
                         "Run will start but state divergence is possible during gameplay.");
-                }
-            }
             else
-            {
                 MainFile.Logger.Info(
                     $"[Sync] All {result.ReceivedAcks.Count} clients acked sync " +
                     $"(syncId={syncId}, version={MainFile.ModVersion}). Proceeding to begin run.");
-            }
 
             // 调用原方法 via 调用方提供的 invoker（每条路径反射调不同的 private method）
             ConfigSyncManager.IsReenteringBeginRun = true;
@@ -180,16 +172,12 @@ internal static class ConfigSyncFlow
             $"主机版本：{MainFile.ModVersion}\n\n" +
             "请让对方升级到与主机相同的 mod 版本后再开始游戏。";
 
-        var popup = NErrorPopup.Create(title, body, showReportBugButton: false);
+        var popup = NErrorPopup.Create(title, body, false);
         if (popup != null)
-        {
             NModalContainer.Instance?.Add(popup);
-        }
         else
-        {
             // popup 创建失败（test mode 之类）退化为 log
             MainFile.Logger.Error($"[Sync] {title}: {body}");
-        }
     }
 }
 
