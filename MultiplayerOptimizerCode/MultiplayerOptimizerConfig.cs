@@ -67,35 +67,35 @@ internal class MultiplayerOptimizerConfig : SimpleModConfig
 
     [ConfigSection("Act4_NormalEnemyMultipliers")]
     [ConfigSlider(0.5, 5.0, 0.05)]
-    public static double Act4_NormalEnemyHpMultStart { get; set; } = 1.3;
+    public static double Act4_NormalEnemyHpMultStart { get; set; } = 2;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemyHpMultEnd { get; set; } = 1.5;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemyHpMultEnd { get; set; } = 2.5;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemyDmgMultStart { get; set; } = 1.1;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemyDmgMultStart { get; set; } = 1.4;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemyDmgMultEnd { get; set; } = 1.2;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemyDmgMultEnd { get; set; } = 1.6;
 
     [ConfigSection("Act4_BossMultipliers")]
     [ConfigSlider(0.5, 10.0, 0.05)]
-    public static double Act4_BossHpMult { get; set; } = 2.0;
+    public static double Act4_BossHpMult { get; set; } = 5.0;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossDmgMult { get; set; } = 1.3;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossDmgMult { get; set; } = 2;
 
     [ConfigSection("Act5_NormalEnemyMultipliers")]
     [ConfigSlider(0.5, 10.0, 0.05)]
-    public static double Act5_NormalEnemyHpMultStart { get; set; } = 2.5;
+    public static double Act5_NormalEnemyHpMultStart { get; set; } = 6;
 
-    [ConfigSlider(0.5, 10.0, 0.05)] public static double Act5_NormalEnemyHpMultEnd { get; set; } = 3.0;
+    [ConfigSlider(0.5, 10.0, 0.05)] public static double Act5_NormalEnemyHpMultEnd { get; set; } = 8;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemyDmgMultStart { get; set; } = 1.3;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemyDmgMultStart { get; set; } = 1.9;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemyDmgMultEnd { get; set; } = 1.5;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemyDmgMultEnd { get; set; } = 2.2;
 
     [ConfigSection("Act5_FinalBossMultipliers")]
     [ConfigSlider(0.5, 20.0, 0.1)]
-    public static double Act5_FinalBossHpMult { get; set; } = 5.0;
+    public static double Act5_FinalBossHpMult { get; set; } = 15;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossDmgMult { get; set; } = 1.8;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossDmgMult { get; set; } = 3;
 
     // ============================================================
     // 来源 act 倍率（叠加在全局倍率之上）
@@ -103,57 +103,57 @@ internal class MultiplayerOptimizerConfig : SimpleModConfig
 
     [ConfigSection("Act4_NormalEnemySrcMultipliers")]
     [ConfigSlider(0.5, 5.0, 0.05)]
-    public static double Act4_NormalEnemySrcHpMult_Act1 { get; set; } = 1.8;
+    public static double Act4_NormalEnemySrcHpMult_Act1 { get; set; } = 3;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcHpMult_Act2 { get; set; } = 1.3;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcHpMult_Act2 { get; set; } = 2;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcHpMult_Act3 { get; set; } = 1.0;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcHpMult_Act3 { get; set; } = 1;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcDmgMult_Act1 { get; set; } = 1.3;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcDmgMult_Act1 { get; set; } = 1.7;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcDmgMult_Act2 { get; set; } = 1.1;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcDmgMult_Act2 { get; set; } = 1.5;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_NormalEnemySrcDmgMult_Act3 { get; set; } = 1.0;
 
     [ConfigSection("Act4_BossSrcMultipliers")]
     [ConfigSlider(0.5, 5.0, 0.05)]
-    public static double Act4_BossSrcHpMult_Act1 { get; set; } = 2.0;
+    public static double Act4_BossSrcHpMult_Act1 { get; set; } = 3;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcHpMult_Act2 { get; set; } = 1.5;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcHpMult_Act2 { get; set; } = 2;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcHpMult_Act3 { get; set; } = 1.0;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcDmgMult_Act1 { get; set; } = 1.3;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcDmgMult_Act1 { get; set; } = 1.7;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcDmgMult_Act2 { get; set; } = 1.1;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcDmgMult_Act2 { get; set; } = 1.5;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act4_BossSrcDmgMult_Act3 { get; set; } = 1.0;
 
     [ConfigSection("Act5_NormalEnemySrcMultipliers")]
     [ConfigSlider(0.5, 5.0, 0.05)]
-    public static double Act5_NormalEnemySrcHpMult_Act1 { get; set; } = 2.0;
+    public static double Act5_NormalEnemySrcHpMult_Act1 { get; set; } = 3;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcHpMult_Act2 { get; set; } = 1.5;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcHpMult_Act2 { get; set; } = 2;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcHpMult_Act3 { get; set; } = 1.0;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcDmgMult_Act1 { get; set; } = 1.35;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcDmgMult_Act1 { get; set; } = 1.7;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcDmgMult_Act2 { get; set; } = 1.15;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcDmgMult_Act2 { get; set; } = 1.5;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_NormalEnemySrcDmgMult_Act3 { get; set; } = 1.0;
 
     [ConfigSection("Act5_FinalBossSrcMultipliers")]
     [ConfigSlider(0.5, 5.0, 0.05)]
-    public static double Act5_FinalBossSrcHpMult_Act1 { get; set; } = 2.5;
+    public static double Act5_FinalBossSrcHpMult_Act1 { get; set; } = 3;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossSrcHpMult_Act2 { get; set; } = 2.0;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossSrcHpMult_Act3 { get; set; } = 1.0;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossSrcDmgMult_Act1 { get; set; } = 1.35;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossSrcDmgMult_Act1 { get; set; } = 1.7;
 
-    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossSrcDmgMult_Act2 { get; set; } = 1.15;
+    [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossSrcDmgMult_Act2 { get; set; } = 1.5;
 
     [ConfigSlider(0.5, 5.0, 0.05)] public static double Act5_FinalBossSrcDmgMult_Act3 { get; set; } = 1.0;
 
