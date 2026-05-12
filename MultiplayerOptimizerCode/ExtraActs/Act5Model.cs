@@ -55,7 +55,7 @@ public class Act5Model : CustomActModel
         SceneHelper.GetScenePath("rest_site/glory_rest_site");
 
     public override string[] BgMusicOptions =>
-        new[] { "event:/music/act3_a1_v2", "event:/music/act3_a2_v2" };
+        new[] { "event:/music/act3_a1_v1", "event:/music/act3_a2_v1" };
 
     public override string[] MusicBankPaths =>
         new[] { "res://banks/desktop/act3_a1.bank", "res://banks/desktop/act3_a2.bank" };
