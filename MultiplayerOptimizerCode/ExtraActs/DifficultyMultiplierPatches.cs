@@ -24,7 +24,7 @@ internal static class SourceActResolver
     {
         if (encounter == null) return null;
         var cache = GetOrBuildCache();
-        return cache.TryGetValue(encounter.Id.Entry, out var idx) ? idx : null;
+        return cache.TryGetValue(encounter.Id.Entry, out int idx) ? idx : null;
     }
 
     private static Dictionary<string, int> GetOrBuildCache()
@@ -41,7 +41,10 @@ internal static class SourceActResolver
 
     private static void AddAct(Dictionary<string, int> cache, ActModel act, int idx)
     {
-        foreach (var e in act.AllEncounters) cache.TryAdd(e.Id.Entry, idx);
+        foreach (var e in act.AllEncounters)
+        {
+            cache.TryAdd(e.Id.Entry, idx);
+        }
     }
 }
 
@@ -59,7 +62,7 @@ internal static class DifficultyMultiplierContext
         else if (state.Act is Act5Model) actIdx = 5;
         else return (1.0, 1.0);
 
-        var isBossNode = IsAtFinalBossNode(state);
+        bool isBossNode = IsAtFinalBossNode(state);
 
         double globalHp, globalDmg;
         if (isBossNode)
@@ -69,7 +72,7 @@ internal static class DifficultyMultiplierContext
         }
         else
         {
-            var progress = GetActProgress(state);
+            double progress = GetActProgress(state);
             globalHp = ExtraActsConfig.GetNormalEnemyHpMult(actIdx).Lerp(progress);
             globalDmg = ExtraActsConfig.GetNormalEnemyDmgMult(actIdx).Lerp(progress);
         }
@@ -101,8 +104,8 @@ internal static class DifficultyMultiplierContext
 
     private static double GetActProgress(IRunState state)
     {
-        var actFloor = state.ActFloor;
-        var totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
+        int actFloor = state.ActFloor;
+        int totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
         if (totalRooms <= 0) return 0;
         return Math.Clamp((double)actFloor / totalRooms, 0.0, 1.0);
     }
@@ -130,7 +133,7 @@ public static class MonsterHpMultiplierPatch
         if (Math.Abs(hpMult - 1.0) < 1e-6) return;
 
         // 用 decimal 计算并 clamp，避免极端值溢出 int 范围
-        var scaled = (decimal)__result.MaxHp * (decimal)hpMult;
+        decimal scaled = (decimal)__result.MaxHp * (decimal)hpMult;
         if (scaled > MonsterRuntimeHpHelper.HpAmountCeiling) scaled = MonsterRuntimeHpHelper.HpAmountCeiling;
         if (scaled < 1m) scaled = 1m;
 
@@ -154,6 +157,9 @@ public static class MonsterDamageMultiplierPatch
         ref decimal __result)
     {
         if (dealer?.Monster == null) return;
+        // 关键：召唤物 / 玩家 pet（如 Osty）有 Monster 字段但属于 Player side。
+        // 它们的攻击不应被敌人伤害倍率放大；只放大真正的敌人攻击。
+        if (dealer.Side != CombatSide.Enemy) return;
 
         var (_, dmgMult) = DifficultyMultiplierContext.GetCurrentMultipliers(
             runState, combatState?.Encounter);

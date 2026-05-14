@@ -1,5 +1,6 @@
 ﻿using System;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 
@@ -57,13 +58,19 @@ internal static class MonsterRuntimeHpHelper
     {
         scaled = originalAmount;
 
-        if (creature.Monster == null) return false; // 玩家不动
+        if (creature.Monster == null) return false; // 玩家本体（无 Monster 模型）
+
+        // 关键：召唤物 / 玩家 pet（如亡灵契约师的 Osty）也有 Monster 字段非 null，但属于 Player side。
+        // 这些不应被敌人 HP 倍率影响——否则它们的 MaxHp 会被 patch 加倍，再加上 base game 内 GainMaxHp
+        // 走 SetMaxHp 路径（amount = MaxHp + delta），会指数级爆炸（每次召唤 ≈ ×倍率）。
+        // 敌人召唤的 minion（如 Fabricator/Ovicopter 召的）走 CombatSide.Enemy，会正常加倍。
+        if (creature.Side != CombatSide.Enemy) return false;
 
         // 关键：infinite-HP 阶段（Doormaker/WaterfallGiant 第一阶段）期间，
         // SetMaxAndCurrentHp(OriginalHp) 这种 reset 调用传的是已加倍值，不能再加倍
         if (creature.ShowsInfiniteHp) return false;
 
-        var mult = GetHpMult(creature);
+        double mult = GetHpMult(creature);
         if (Math.Abs(mult - 1.0) < 1e-6) return false;
 
         scaled = originalAmount * (decimal)mult;
