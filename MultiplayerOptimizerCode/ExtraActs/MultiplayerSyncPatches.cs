@@ -146,44 +146,94 @@ internal static class ConfigSyncFlow
     /// <summary>注册 wrapper handler 的共享逻辑——StartRunLobby 和 LoadRunLobby 各自的 patch 调用此方法。</summary>
     public static void RegisterCustomMessageHandler(INetGameService netService, string lobbyKind)
     {
-        netService.RegisterMessageHandler<CustomMessageWrapper>(EarlyHandleCustomMessage);
+        try
+        {
+            netService.RegisterMessageHandler<CustomMessageWrapper>(EarlyHandleCustomMessage);
 
-        // 关键: 让 ConfigSyncManager 拿到 NetService 引用，否则 lobby 阶段的 SendAck / IsLocalHost
-        // 用 RunManager.NetService（还是 null）取不到 NetService，sync 会全程失败
-        ConfigSyncManager.SetActiveNetService(netService);
+            // 关键: 让 ConfigSyncManager 拿到 NetService 引用，否则 lobby 阶段的 SendAck / IsLocalHost
+            // 用 RunManager.NetService（还是 null）取不到 NetService，sync 会全程失败
+            ConfigSyncManager.SetActiveNetService(netService);
 
-        MainFile.Logger.Info(
-            $"[Sync] Early-registered CustomMessageWrapper handler in {lobbyKind} ctor " +
-            $"(NetService.Type={netService.Type})");
+            MainFile.Logger.Info(
+                $"[Sync] Early-registered CustomMessageWrapper handler in {lobbyKind} ctor " +
+                $"(NetService.Type={netService.Type})");
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error(
+                $"[Sync] RegisterCustomMessageHandler failed for {lobbyKind}: {ex}");
+        }
     }
 
     private static void EarlyHandleCustomMessage(CustomMessageWrapper wrapper, ulong senderId)
     {
         // 跟 BaseLib 的 HandleCustomMessage 行为一致——直接转发给 ICustomMessage 实现
-        wrapper.Message.HandleMessage(senderId);
+        // 这里加 try——message handler 抛异常会被 NetService 包成 NetError 影响连接
+        try
+        {
+            wrapper.Message?.HandleMessage(senderId);
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"[Sync] EarlyHandleCustomMessage failed: {ex}");
+        }
     }
 
     private static void ShowIncompatibilityPopup(IReadOnlyCollection<ulong> missingClients)
     {
-        var clientList = string.Join("\n", missingClients.Select(id => $"  • {id}"));
-        var title = "Mod 版本不兼容";
-        var body =
-            $"以下玩家的 MultiplayerOptimizer mod 版本太旧，无法同步配置：\n\n{clientList}\n\n" +
-            $"主机版本：{MainFile.ModVersion}\n\n" +
-            "请让对方升级到与主机相同的 mod 版本后再开始游戏。";
+        try
+        {
+            var clientList = string.Join("\n", missingClients.Select(id => $"  • {id}"));
+            var title = "Mod 版本不兼容";
+            var body =
+                $"以下玩家的 MultiplayerOptimizer mod 版本太旧，无法同步配置：\n\n{clientList}\n\n" +
+                $"主机版本：{MainFile.ModVersion}\n\n" +
+                "请让对方升级到与主机相同的 mod 版本后再开始游戏。";
 
-        var popup = NErrorPopup.Create(title, body, false);
-        if (popup != null)
-            NModalContainer.Instance?.Add(popup);
-        else
-            // popup 创建失败（test mode 之类）退化为 log
-            MainFile.Logger.Error($"[Sync] {title}: {body}");
+            var popup = NErrorPopup.Create(title, body, false);
+            if (popup != null)
+                NModalContainer.Instance?.Add(popup);
+            else
+                // popup 创建失败（test mode 之类）退化为 log
+                MainFile.Logger.Error($"[Sync] {title}: {body}");
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"[Sync] ShowIncompatibilityPopup failed: {ex}");
+        }
     }
 }
 
 // ============================================================
-// EarlyRegisterCustomMessageHandlerPatch（两条 lobby 路径各一份）
+// EarlyRegisterCustomMessageHandlerPatch（两条 lobby 路径各一份，软匹配多个 ctor）
 // ============================================================
+
+/// <summary>
+/// 共享的 ctor 选择逻辑：在指定类型上找所有"含 INetGameService 参数"的实例 ctor。
+///
+/// 用 TargetMethods 软匹配而非硬编码签名，原因：
+///   - base game v0.103 已经有<b>多个 ctor</b>（StartRunLobby 4 参 / 5 参，LoadRunLobby 两个 3 参版本）
+///   - 我们之前只 patch 一个签名，silent miss 了其它路径（虽然构造链让另一个版本最终也会进根 ctor，
+///     但 ctor 顺序若变，会突然漏 patch）
+///   - 未来 base game 升级签名时不会突然失效——只要 INetGameService 参数还在就匹配上
+///
+/// 注意：这会让某些 ctor 因为构造链被 patch 两次。例如 5 参 StartRunLobby ctor 调 this(4参)
+/// 时 4 参 ctor 的 postfix 会跑一次；5 参 ctor 跑完时 5 参 ctor 的 postfix 也会跑——
+/// RegisterCustomMessageHandler 会被调用两次。两次调用之间 idempotent：
+///   - INetGameService.RegisterMessageHandler 重复注册会 throw（BaseLib 实现细节）；
+///     但我们 catch 在 RegisterCustomMessageHandler 内部，二次失败被吞掉，第一次注册仍有效
+///   - ConfigSyncManager.SetActiveNetService 是简单赋值，幂等
+/// </summary>
+internal static class LobbyCtorTargets
+{
+    public static IEnumerable<MethodBase> FindCtorsWithNetService(Type lobbyType)
+    {
+        foreach (var ctor in lobbyType.GetConstructors(
+                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            if (ctor.GetParameters().Any(p => p.ParameterType == typeof(INetGameService)))
+                yield return ctor;
+    }
+}
 
 /// <summary>
 /// 让 StartRunLobby 构造时就注册 CustomMessageWrapper handler。
@@ -193,14 +243,22 @@ internal static class ConfigSyncFlow
 /// BaseLib 默认在 RunManager.InitializeShared postfix 才注册 wrapper handler——那时已经在
 /// BeginRunLocally 之后。client 在 lobby 期收到的 ConfigSync 消息没 handler，会被丢弃。
 /// </summary>
-[HarmonyPatch(typeof(StartRunLobby), MethodType.Constructor,
-    new[] { typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener), typeof(int) })]
+[HarmonyPatch]
 public static class EarlyRegisterHandlerForStartLobbyPatch
 {
+    [HarmonyTargetMethods]
+    public static IEnumerable<MethodBase> TargetMethods()
+    {
+        return LobbyCtorTargets.FindCtorsWithNetService(typeof(StartRunLobby));
+    }
+
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void Postfix(StartRunLobby __instance)
     {
-        ConfigSyncFlow.RegisterCustomMessageHandler(__instance.NetService, "StartRunLobby");
+        // PatchScope.Run 包 try——避免 ctor 抛异常打断整个 lobby 创建
+        PatchScope.Run(nameof(EarlyRegisterHandlerForStartLobbyPatch),
+            () => { ConfigSyncFlow.RegisterCustomMessageHandler(__instance.NetService, "StartRunLobby"); });
     }
 }
 
@@ -208,14 +266,21 @@ public static class EarlyRegisterHandlerForStartLobbyPatch
 /// 同 EarlyRegisterHandlerForStartLobbyPatch，但用于 LoadRunLobby（加载存档继续玩的入口）。
 /// 没这个 patch 的话 LoadRunLobby 路径上 host 端的 sync broadcast 也收不到 client ack。
 /// </summary>
-[HarmonyPatch(typeof(LoadRunLobby), MethodType.Constructor,
-    new[] { typeof(INetGameService), typeof(ILoadRunLobbyListener), typeof(SerializableRun) })]
+[HarmonyPatch]
 public static class EarlyRegisterHandlerForLoadLobbyPatch
 {
+    [HarmonyTargetMethods]
+    public static IEnumerable<MethodBase> TargetMethods()
+    {
+        return LobbyCtorTargets.FindCtorsWithNetService(typeof(LoadRunLobby));
+    }
+
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void Postfix(LoadRunLobby __instance)
     {
-        ConfigSyncFlow.RegisterCustomMessageHandler(__instance.NetService, "LoadRunLobby");
+        PatchScope.Run(nameof(EarlyRegisterHandlerForLoadLobbyPatch),
+            () => { ConfigSyncFlow.RegisterCustomMessageHandler(__instance.NetService, "LoadRunLobby"); });
     }
 }
 
@@ -226,7 +291,7 @@ public static class EarlyRegisterHandlerForLoadLobbyPatch
 /// <summary>
 /// Host 端：开新 run 时在广播 LobbyBeginRunMessage 之前 sync 配置 + 等 ack。
 ///
-/// Patch StartRunLobby.BeginRunForAllPlayers (private, async-ish 但实际是同步 void)。
+/// Patch StartRunLobby.BeginRunForAllPlayers (private, 同步 void)。
 /// 详见 <see cref="ConfigSyncFlow"/> 注释的整体流程。
 /// </summary>
 [HarmonyPatch(typeof(StartRunLobby), "BeginRunForAllPlayers")]
@@ -238,17 +303,23 @@ public static class HostBroadcastConfigOnStartPatch
         typeof(StartRunLobby), "BeginRunForAllPlayers",
         new[] { typeof(string), typeof(List<ModifierModel>) });
 
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPrefix]
     public static bool Prefix(
         StartRunLobby __instance,
         string seed,
         List<ModifierModel> modifiers)
     {
-        return ConfigSyncFlow.StartSyncOrPassthrough(
-            __instance.NetService,
-            __instance.Players.Select(p => p.id).ToList(),
-            // ack 成功后回调：用反射调原 BeginRunForAllPlayers
-            () => OriginalMethod.Invoke(__instance, new object[] { seed, modifiers }));
+        // 入口检查 Enabled，关闭时直接放行原方法（不做 sync，也不阻塞别人的 patch）
+        if (!PatchScope.IsEnabled) return true;
+
+        return PatchScope.Run<bool>(nameof(HostBroadcastConfigOnStartPatch),
+            () => ConfigSyncFlow.StartSyncOrPassthrough(
+                __instance.NetService,
+                __instance.Players.Select(p => p.id).ToList(),
+                // ack 成功后回调：用反射调原 BeginRunForAllPlayers
+                () => OriginalMethod.Invoke(__instance, new object[] { seed, modifiers })),
+            true); // 出异常时放行原方法，保证用户能开 run
     }
 }
 
@@ -270,17 +341,23 @@ public static class HostBroadcastConfigOnLoadPatch
     private static MethodInfo OriginalMethod => _originalMethod ??= AccessTools.Method(
         typeof(LoadRunLobby), "BeginRunIfAllPlayersReady");
 
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPrefix]
     public static bool Prefix(LoadRunLobby __instance)
     {
-        // 只有"所有连接玩家都 ready 即将开 run"时介入 sync；否则放行让原方法做 no-op
-        if (!__instance.IsAboutToBeginGame()) return true;
+        if (!PatchScope.IsEnabled) return true;
 
-        return ConfigSyncFlow.StartSyncOrPassthrough(
-            __instance.NetService,
-            __instance.ConnectedPlayerIds,
-            // ack 成功后回调：用反射调原 BeginRunIfAllPlayersReady
-            () => OriginalMethod.Invoke(__instance, null));
+        return PatchScope.Run<bool>(nameof(HostBroadcastConfigOnLoadPatch), () =>
+        {
+            // 只有"所有连接玩家都 ready 即将开 run"时介入 sync；否则放行让原方法做 no-op
+            if (!__instance.IsAboutToBeginGame()) return true;
+
+            return ConfigSyncFlow.StartSyncOrPassthrough(
+                __instance.NetService,
+                __instance.ConnectedPlayerIds,
+                // ack 成功后回调：用反射调原 BeginRunIfAllPlayersReady
+                () => OriginalMethod.Invoke(__instance, null));
+        }, true);
     }
 }
 
@@ -295,12 +372,19 @@ public static class HostBroadcastConfigOnLoadPatch
 [HarmonyPatch(typeof(RunManager), nameof(RunManager.CleanUp))]
 public static class RestoreConfigOnRunEndPatch
 {
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void RestoreAfterRunEnd()
     {
-        // ConfigSyncManager.Restore 内部会检查 IsActive：
+        // Restore 内部已经有 try/catch + IsActive 早返：
         //   - host 端 / 单机端：IsActive=false，无操作
         //   - client 端：IsActive=true，从磁盘 reload 恢复原配置
-        ConfigSyncManager.Restore();
+        // 即使 Enabled=false 也要 Restore，否则 mod 被禁用后 IsActive 一直挂着，重启游戏才清理
+        PatchScope.Run(nameof(RestoreConfigOnRunEndPatch), () =>
+        {
+            ConfigSyncManager.Restore();
+            ConfigSyncManager.ClearActiveNetService();
+            ConfigSyncManager.ClearAllPending();
+        });
     }
 }

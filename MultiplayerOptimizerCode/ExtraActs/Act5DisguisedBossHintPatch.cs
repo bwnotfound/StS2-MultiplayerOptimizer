@@ -14,15 +14,21 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 [HarmonyPatch(typeof(RunManager), nameof(RunManager.EnterAct))]
 public static class Act5DisguisedBossHintPatch
 {
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void ShowHint(int currentActIndex)
     {
-        // currentActIndex 是 0-indexed: act5 = 4
-        if (currentActIndex != 4) return;
-        if (!ExtraActsConfig.ShouldShowAct5DisguisedBossWarning) return;
+        if (!PatchScope.IsEnabled) return;
 
-        MainFile.Logger.Info(
-            "[ExtraActs] 进入第 5 层 ⚠️ —— 中部所有战斗节点 UI 显示为小怪图标，" +
-            "但实际是 boss 难度战斗（来自 act1/2/3 boss 池混合）。请做好准备。");
+        PatchScope.Run(nameof(Act5DisguisedBossHintPatch), () =>
+        {
+            // currentActIndex 是 0-indexed: act5 = 4
+            if (currentActIndex != 4) return;
+            if (!ExtraActsConfig.ShouldShowAct5DisguisedBossWarning) return;
+
+            MainFile.Logger.Info(
+                "进入第 5 层 ⚠️ —— 中部所有战斗节点 UI 显示为小怪图标，" +
+                "但实际是 boss 难度战斗（来自 act1/2/3 boss 池混合）。请做好准备。");
+        });
     }
 }

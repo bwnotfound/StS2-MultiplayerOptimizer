@@ -1,9 +1,5 @@
 ﻿// ReSharper disable InconsistentNaming
-// 上一行抑制 IDE 关于 __instance 的命名规则警告：
-// __instance 是 Harmony 的特殊参数名约定，用来注入 patched 实例 —— 必须严格 __instance，
-// 改成其他名字（比如 instance）会导致 PatchAll 抛
-//   "Parameter 'instance' not found in method ..."
-// 整个 mod 加载失败。
+// __instance 是 Harmony 强制约定，改了会让 PatchAll 抛 "Parameter not found"。
 
 using System.Collections.Generic;
 using System.Linq;
@@ -31,57 +27,69 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 /// 进 act 时 NMapScreen.SetMap → NAncientMapPoint._Ready 读 act.Ancient → 抛
 ///   "RoomSet.Ancient not set! You must call GenerateRooms"
 ///
-/// 我们已经修了 GetUnlockedAncients（让 act4/5 复用 Glory），但**只对新开 run 生效**——
+/// 我们已经修了 GetUnlockedAncients（让 act4/5 复用 Glory），但<b>只对新开 run 生效</b>——
 /// 旧存档里 _rooms._ancient 已经是 null 写到磁盘了。这个 patch 在 saved run 加载时检查并补抽。
 ///
 /// 触发链路：RunManager.InitializeSavedRun → 遍历 acts 调 act.ValidateRoomsAfterLoad → 我们 postfix 补抽。
 /// 已经有 Ancient 的 act 不动；只补 _ancient == null 的（即出问题的 custom act）。
+///
+/// ## 不 honor PatchScope.IsEnabled
+/// 这是<b>旧存档修复</b>逻辑。如果 honor Enabled 然后用户把 Enabled 设为 false 去加载有问题的
+/// 旧存档，会直接 crash。不让 Enabled 控制这个 patch——它对正常存档是 no-op，没有副作用。
 /// </summary>
 [HarmonyPatch(typeof(ActModel), nameof(ActModel.ValidateRoomsAfterLoad))]
 public static class ValidateAncientAfterLoadPatch
 {
-    private static readonly FieldInfo RoomsField =
+    private static readonly FieldInfo? RoomsField =
         AccessTools.Field(typeof(ActModel), "_rooms");
 
-    private static readonly FieldInfo SharedAncientSubsetField =
+    private static readonly FieldInfo? SharedAncientSubsetField =
         AccessTools.Field(typeof(ActModel), "_sharedAncientSubset");
 
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void EnsureAncientFilled(ActModel __instance, Rng rng)
     {
-        if (RoomsField == null) return;
-        if (RoomsField.GetValue(__instance) is not RoomSet rooms) return;
-        if (rooms.HasAncient) return; // 已有 Ancient，不动
-
-        // 没有 Ancient（旧存档遗留），从 act 自己的 unlocked 池补抽
-        // RunManager.State 是 private，用反射访问
-        var rm = RunManager.Instance;
-        if (rm == null) return;
-        var state = RunStateAccessor.GetState(rm);
-        if (state == null) return;
-
-        var sharedSubset = SharedAncientSubsetField?.GetValue(__instance) as List<AncientEventModel>
-                           ?? new List<AncientEventModel>();
-
-        var pool = __instance.GetUnlockedAncients(state.UnlockState)
-            .Concat(sharedSubset)
-            .Distinct()
-            .ToList();
-
-        if (pool.Count == 0)
+        try
         {
-            MainFile.Logger.Warn(
-                $"[ExtraActs] Cannot patch missing ancient for {__instance.Id.Entry}: " +
-                "unlocked ancients pool is empty (this act has no fallback)");
-            return;
+            if (RoomsField == null) return;
+            if (RoomsField.GetValue(__instance) is not RoomSet rooms) return;
+            if (rooms.HasAncient) return; // 已有 Ancient，不动
+
+            // 没有 Ancient（旧存档遗留），从 act 自己的 unlocked 池补抽
+            // RunManager.State 是 private，用反射访问
+            var rm = RunManager.Instance;
+            if (rm == null) return;
+            var state = RunStateAccessor.GetState(rm);
+            if (state == null) return;
+
+            var sharedSubset = SharedAncientSubsetField?.GetValue(__instance) as List<AncientEventModel>
+                               ?? new List<AncientEventModel>();
+
+            var pool = __instance.GetUnlockedAncients(state.UnlockState)
+                .Concat(sharedSubset)
+                .Distinct()
+                .ToList();
+
+            if (pool.Count == 0)
+            {
+                MainFile.Logger.Warn(
+                    $"Cannot patch missing ancient for {__instance.Id.Entry}: " +
+                    "unlocked ancients pool is empty (this act has no fallback)");
+                return;
+            }
+
+            var picked = rng.NextItem(pool);
+            if (picked == null) return;
+
+            rooms.Ancient = picked;
+            MainFile.Logger.Info(
+                $"Patched missing ancient for {__instance.Id.Entry} on saved run load: " +
+                $"{picked.Id.Entry} (likely created by older mod version)");
         }
-
-        var picked = rng.NextItem(pool);
-        if (picked == null) return;
-
-        rooms.Ancient = picked;
-        MainFile.Logger.Info(
-            $"[ExtraActs] Patched missing ancient for {__instance.Id.Entry} on saved run load: " +
-            $"{picked.Id.Entry} (likely created by older mod version)");
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"ValidateAncientAfterLoadPatch failed: {ex}");
+        }
     }
 }

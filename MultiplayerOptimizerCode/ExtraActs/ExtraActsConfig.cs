@@ -28,7 +28,7 @@ internal readonly record struct ScalingRange(double Start, double End)
 /// <summary>
 /// 把 <see cref="MultiplayerOptimizerConfig"/> 的 BaseLib slider 字段封装为语义化 API。
 ///
-/// 池权重 getter 返回值是**已归一化**的（即使磁盘上的原值不归一，运行时使用值总是 sum=1）。
+/// 池权重 getter 返回值是<b>已归一化</b>的（即使磁盘上的原值不归一，运行时使用值总是 sum=1）。
 /// 这是防御性做法——配合 WeightNormalizationPatch 在保存时也归一化，但即使绕过保存（手改 ini），
 /// 业务逻辑仍能拿到正常的归一化权重。
 /// </summary>
@@ -224,10 +224,10 @@ internal static class ExtraActsConfig
     //
     // ## 设计目标
     // 让"开关 → 该开关启用时要从 boss 池排除哪些 encounter"的映射跟 base game 的具体 EncounterModel
-    // 子类**完全解耦**：
-    //   - **编译期解耦**：mod 不 reference 任何具体的 EncounterModel 子类型（如 DoormakerBoss），
+    // 子类<b>完全解耦</b>：
+    //   - <b>编译期解耦</b>：mod 不 reference 任何具体的 EncounterModel 子类型（如 DoormakerBoss），
     //     即使将来 base game 删除这些类型，mod 也能正常编译。
-    //   - **运行期容错**：用字符串 ID (Id.Entry) 匹配；如果 base game 那个 encounter 实际不存在了，
+    //   - <b>运行期容错</b>：用字符串 ID (Id.Entry) 匹配；如果 base game 那个 encounter 实际不存在了，
     //     字符串永远匹配不到 → filter 是 no-op → 既不崩溃也不影响其他 boss 抽样。
     //
     // ## 注册新过滤开关的步骤
@@ -236,18 +236,15 @@ internal static class ExtraActsConfig
     // 3. 完。Act4Model / Act5Model / CustomActEncounterReplacementPatch 三处调用点无需改动
     //
     // ## 关于 Id.Entry 的字符串值
-    // base game 的 ModelDb.GetEntry 用 StringHelper.Slugify(type.Name) 生成 ID:
+    // base game 的 ModelDb.GetEntry 用 StringHelper.Slugify(type.Name) 生成 ID：
     //   - CamelCase 拆分为下划线分隔
     //   - 大写化
     //   - 移除特殊字符
     // 即 `DoormakerBoss` 类的 Id.Entry == "DOORMAKER_BOSS"。
-    //
-    // 想确认某个 boss 的精确 ID 字符串，看其在 log 里的 encounter ID（如 "SOUL_NEXUS_ELITE"）
-    // 或者直接对类名跑 Slugify。
 
     /// <summary>
-    /// 一条 boss 池过滤规则：当 <see cref="IsEnabled"/> 返回 true 时，
-    /// <see cref="ExcludedEntries"/> 列出的 Id.Entry 会从所有 boss 池中被剔除。
+    /// 一条 boss 池过滤规则：当 <c>IsEnabled</c> 返回 true 时，
+    /// <c>ExcludedEntries</c> 列出的 Id.Entry 会从所有 boss 池中被剔除。
     /// </summary>
     /// <param name="Description">用于 log/调试的可读名字，不影响匹配逻辑。</param>
     private sealed record BossPoolExclusion(
@@ -277,16 +274,29 @@ internal static class ExtraActsConfig
     ///
     /// 对非 boss encounter 不影响（只按 Id.Entry 字符串匹配，普通战斗/精英战斗的 ID 不会跟
     /// boss 排除列表里的 ID 撞）。
+    ///
+    /// 任何步骤抛异常都不会向上传播——返回原列表（不应用过滤）。这是 hot path 不能阻塞游戏。
     /// </summary>
     public static List<EncounterModel> ApplyBossPoolFilters(IEnumerable<EncounterModel> source)
     {
         var list = source as List<EncounterModel> ?? source.ToList();
 
-        // 收集当前所有启用规则对应的排除 ID
+        // 收集当前所有启用规则对应的排除 ID。
+        // 每条规则单独 try——一个规则 IsEnabled 抛异常不影响其他规则
         HashSet<string>? excluded = null;
         foreach (var rule in _exclusions)
         {
-            if (!rule.IsEnabled()) continue;
+            bool enabled;
+            try
+            {
+                enabled = rule.IsEnabled();
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (!enabled) continue;
             excluded ??= new HashSet<string>(StringComparer.Ordinal);
             foreach (var id in rule.ExcludedEntries) excluded.Add(id);
         }
@@ -295,10 +305,47 @@ internal static class ExtraActsConfig
 
         // Id 可能为 null（未注册的 encounter），保守不过滤；
         // 只有 Id.Entry 命中排除列表才剔除。
-        return list.Where(e =>
+        // 整段加 try 防止边缘 EncounterModel 访问 Id 抛 NRE。
+        try
         {
-            var entry = e.Id?.Entry;
-            return entry == null || !excluded.Contains(entry);
-        }).ToList();
+            return list.Where(e =>
+            {
+                var entry = e.Id?.Entry;
+                return entry == null || !excluded.Contains(entry);
+            }).ToList();
+        }
+        catch
+        {
+            return list;
+        }
     }
+
+    // ============================================================
+    // BGM Bank "额外可播放 event" 白名单
+    // ============================================================
+    //
+    // ## 背景
+    // 自定义 act（Act4/5）的 BGM bank 是直接复用 act3 (Glory) 的 bank，所以 act3 boss 的
+    // event ID 必然包含在 bank 中。但混合战斗会拿 act1/2 的 boss encounter，act3 的 bank
+    // 不一定包含它们的 BgmEvent，调用 PlayCustomMusic 会失败。
+    //
+    // CustomActMissingBgmFallbackPatch 的策略：
+    //   1. 优先尝试播放 encounter 自己的 BgmEvent
+    //   2. 失败则回落到 act 的默认 boss BGM
+    //
+    // 这里的白名单解决一个反向问题：act3 bank 包含但**不属于** act3 boss 的 event（比如
+    // CeremonialBeast，它是 act2 boss 但也被 act3 bank 包含）。这些 event 直接播放即可。
+    //
+    // 白名单是数据驱动的，未来新增"跨 act 复用"的 event 在这里加一行字符串即可。
+
+    /// <summary>
+    /// act3 bank（被自定义 act 复用）实际包含但不属于 act3 boss 的 event ID。
+    /// 这些 event 即使是从其他 act 的 boss 取过来的，也能直接在自定义 act 中播放。
+    /// </summary>
+    public static readonly HashSet<string> Act3BankCrossActExtras =
+        new(StringComparer.Ordinal)
+        {
+            "event:/music/boss/ceremonial_beast"
+            // 未来发现其他 act 跨 bank 复用的 event 可以加在这里
+        };
 }

@@ -5,7 +5,6 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Models;
 using MegaCrit.Sts2.Core.Hooks;
-using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Acts;
 using MegaCrit.Sts2.Core.Models.Encounters;
@@ -14,37 +13,94 @@ using MegaCrit.Sts2.Core.Runs;
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 
 /// <summary>
-/// Encounter → 源 act 反查（lazy 缓存）。
+/// Encounter → 源 act 反查。
+///
+/// ## 缓存策略：run-scoped
+///
+/// 旧实现是<b>永久缓存</b>——首次构建后永不重建。问题在于其他 mod 可能在 run 启动后才注册
+/// 自己的 encounter 到 ModelDb（比如 BaseLib 的 lazy registration），这些 encounter 没进
+/// 我们的缓存，永远查不到源 act。
+///
+/// 新实现：缓存在每次 run 开始时（RunManager.GenerateRooms 的 prefix）失效。这保证：
+///   - 缓存在 run 内不重建——查询是 hot path（每个 ModifyDamage / CreateCreature 调用）
+///   - 不同 run 之间允许 ModelDb 变化（例如重启游戏前装了新 mod）
+///
+/// 缓存失效由 <see cref="InvalidateSourceActResolverCachePatch"/> 触发。
 /// </summary>
 internal static class SourceActResolver
 {
     private static Dictionary<string, int>? _cache;
 
+    /// <summary>Run 开始时调用，清空缓存以便下次 GetSourceActIndex 重建。</summary>
+    public static void Invalidate()
+    {
+        _cache = null;
+    }
+
     public static int? GetSourceActIndex(EncounterModel? encounter)
     {
         if (encounter == null) return null;
-        var cache = GetOrBuildCache();
-        return cache.TryGetValue(encounter.Id.Entry, out int idx) ? idx : null;
+
+        try
+        {
+            var entry = encounter.Id?.Entry;
+            if (entry == null) return null;
+
+            var cache = GetOrBuildCache();
+            return cache.TryGetValue(entry, out var idx) ? idx : null;
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"SourceActResolver.GetSourceActIndex failed: {ex}");
+            return null;
+        }
     }
 
     private static Dictionary<string, int> GetOrBuildCache()
     {
         if (_cache != null) return _cache;
 
-        var c = new Dictionary<string, int>();
-        AddAct(c, ModelDb.Act<Overgrowth>(), 1);
-        AddAct(c, ModelDb.Act<Hive>(), 2);
-        AddAct(c, ModelDb.Act<Glory>(), 3);
+        var c = new Dictionary<string, int>(StringComparer.Ordinal);
+        try
+        {
+            AddAct(c, ModelDb.Act<Overgrowth>(), 1);
+            AddAct(c, ModelDb.Act<Hive>(), 2);
+            AddAct(c, ModelDb.Act<Glory>(), 3);
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"SourceActResolver cache build failed: {ex}");
+            // 即使 build 失败也缓存空 dict，避免每次查询都重试
+        }
+
         _cache = c;
         return c;
     }
 
-    private static void AddAct(Dictionary<string, int> cache, ActModel act, int idx)
+    private static void AddAct(Dictionary<string, int> cache, ActModel? act, int idx)
     {
+        if (act == null) return;
         foreach (var e in act.AllEncounters)
         {
-            cache.TryAdd(e.Id.Entry, idx);
+            var entry = e?.Id?.Entry;
+            if (entry != null) cache.TryAdd(entry, idx);
         }
+    }
+}
+
+/// <summary>
+/// Run 开始时清空 SourceActResolver 缓存。
+/// patch 在 BaseLib 的 GenerateRooms patch <b>之前</b>跑（Priority.High），确保缓存先失效，
+/// 让任何后续依赖 SourceActResolver 的 patch 拿到最新结果。
+/// </summary>
+[HarmonyPatch(typeof(RunManager), nameof(RunManager.GenerateRooms))]
+public static class InvalidateSourceActResolverCachePatch
+{
+    [HarmonyPriority(Priority.High)]
+    [HarmonyPrefix]
+    public static void InvalidateCache()
+    {
+        PatchScope.Run(nameof(InvalidateSourceActResolverCachePatch), SourceActResolver.Invalidate);
     }
 }
 
@@ -52,6 +108,8 @@ internal static class SourceActResolver
 /// 数值倍率公共逻辑。
 ///
 /// 倍率 = 全局 × 来源：全局基于"是不是 boss 节点 + 层内进度"决定；来源基于该怪物所属 encounter 的源 act。
+///
+/// <b>仅在 Act4/5 内生效</b>——其他 act 直接返回 (1.0, 1.0)，由调用方做后续早返。
 /// </summary>
 internal static class DifficultyMultiplierContext
 {
@@ -62,7 +120,7 @@ internal static class DifficultyMultiplierContext
         else if (state.Act is Act5Model) actIdx = 5;
         else return (1.0, 1.0);
 
-        bool isBossNode = IsAtFinalBossNode(state);
+        var isBossNode = IsAtFinalBossNode(state);
 
         double globalHp, globalDmg;
         if (isBossNode)
@@ -72,7 +130,7 @@ internal static class DifficultyMultiplierContext
         }
         else
         {
-            double progress = GetActProgress(state);
+            var progress = GetActProgress(state);
             globalHp = ExtraActsConfig.GetNormalEnemyHpMult(actIdx).Lerp(progress);
             globalDmg = ExtraActsConfig.GetNormalEnemyDmgMult(actIdx).Lerp(progress);
         }
@@ -104,51 +162,104 @@ internal static class DifficultyMultiplierContext
 
     private static double GetActProgress(IRunState state)
     {
-        int actFloor = state.ActFloor;
-        int totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
+        var actFloor = state.ActFloor;
+        var totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
         if (totalRooms <= 0) return 0;
         return Math.Clamp((double)actFloor / totalRooms, 0.0, 1.0);
     }
 }
 
 /// <summary>
-/// 怪物 spawn 时 HP 倍率：patch CombatState.CreateCreature 的 postfix。
-/// 在游戏自己的 SetUniqueMonsterHpValue / ScaleMonsterHpForMultiplayer 跑完之后再加倍。
+/// 怪物 spawn 时 HP 倍率：patch <see cref="CombatManager.SetUpCombat"/> 的 postfix。
 ///
-/// 同样需要 clamp 到 999_999_999——理论上 spawn 时怪物 HP 不会接近 int.MaxValue，
-/// 但稳健起见加 clamp 跟 runtime patch 行为一致。
+/// ## 为什么 patch SetUpCombat 而不是 CombatState.CreateCreature postfix（v0.4.0 旧实现）
+///
+/// 旧 patch 在 <c>CombatState.CreateCreature</c> postfix 跑：每个 creature spawn 完<b>立即</b>
+/// 把它 MaxHp ×m。但 base game 在 <c>CreateCreature</c> 内调 <c>SetUniqueMonsterHpValue</c>
+/// 给每个怪物分配 <b>[MinInitialHp, MaxInitialHp]</b> 范围内的<b>唯一</b>整数 MaxHp。这个
+/// 检查依赖"已 spawn 的同队怪物当前 MaxHp"——而我们的 patch 已经把那些 MaxHp 改成了
+/// 200+ 数量级，跟新怪物想从 [40,46] 抽的范围完全没交集，<b>uniqueness 检查失效</b>。
+///
+/// 失效结果：多个节段抽到相同 base value（如三个都 43）→ spawn-time ×m 后也相同
+/// （215, 215, 215）→ 千足虫 <c>AfterAddedToRoom</c> 内 dedup 逻辑发现重复 → maxHp 在
+/// while 循环里被重置到 <c>ScaleHpForMultiplayer(MinInitialHp, ..., count, actIdx)</c>（单人
+/// 直接等于 MinInitialHp=40）→ <c>SetMaxAndCurrentHp(creature, 40)</c> → 我们 runtime patch
+/// 又 ×m → 节段最终 MaxHp = 40×5 = <b>200</b>（截图中间节段症状）。
+///
+/// 修复：推迟到 <c>CombatManager.SetUpCombat</c> postfix——所有 creature 已经 spawn 完，
+/// <c>SetUniqueMonsterHpValue</c> 已经基于原始 [40,46] 值跑完，uniqueness 保持。然后我们
+/// 一次性遍历 enemies 批量加倍。
+///
+/// ## SetUpCombat 的位置
+/// 看 <c>CombatRoom.cs</c>: foreach CreateCreature → AddCreature → <c>SetUpCombat(state)</c>
+/// → <c>AfterCombatRoomLoaded</c>（触发 <c>AfterCreatureAdded</c> 循环，含 <c>AfterAddedToRoom</c>）。
+///
+/// 我们 patch SetUpCombat postfix → 在 AfterAddedToRoom 之前完成所有缩放 → AfterAddedToRoom
+/// 内调 SetMaxAndCurrentHp 时其他 creature MaxHp 已经一致地 ×m 过，dedup 基于一致数据。
+///
+/// ## 早返优化
+/// 整个 act 不是 4/5 时立即早返不遍历，零开销。
 /// </summary>
-[HarmonyPatch(typeof(CombatState), nameof(CombatState.CreateCreature))]
+[HarmonyPatch(typeof(CombatManager),
+    nameof(CombatManager.SetUpCombat))]
 public static class MonsterHpMultiplierPatch
 {
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
-    public static void ApplyHpMultiplier(CombatState __instance, CombatSide side, Creature __result)
+    public static void ApplyHpMultiplierToAllEnemies(CombatState state)
     {
-        if (side != CombatSide.Enemy) return;
-        if (__result.Monster == null) return;
+        if (!PatchScope.IsEnabled) return;
+        if (state == null) return;
 
-        var (hpMult, _) = DifficultyMultiplierContext.GetCurrentMultipliers(
-            __instance.RunState, __instance.Encounter);
+        PatchScope.Run(nameof(MonsterHpMultiplierPatch), () =>
+        {
+            // 必须在 act4/5 才介入——其他 act 由 base game 控制
+            var act = state.RunState?.Act;
+            if (act is not Act4Model && act is not Act5Model) return;
 
-        if (Math.Abs(hpMult - 1.0) < 1e-6) return;
+            // 注意：DifficultyMultiplierContext 在每个 creature 上算出来的 mult 是相同的
+            // （取决于 state.Act / state.Map / state.CurrentMapCoord / encounter，跟 creature 个体无关）。
+            // 算一次即可，然后给所有 enemy 应用。
+            var (hpMult, _) = DifficultyMultiplierContext.GetCurrentMultipliers(
+                state.RunState, state.Encounter);
 
-        // 用 decimal 计算并 clamp，避免极端值溢出 int 范围
-        decimal scaled = (decimal)__result.MaxHp * (decimal)hpMult;
-        if (scaled > MonsterRuntimeHpHelper.HpAmountCeiling) scaled = MonsterRuntimeHpHelper.HpAmountCeiling;
-        if (scaled < 1m) scaled = 1m;
+            if (Math.Abs(hpMult - 1.0) < 1e-6) return;
 
-        __result.SetMaxHpInternal(scaled);
-        __result.SetCurrentHpInternal(scaled);
+            var mult = (decimal)hpMult;
+
+            foreach (var creature in state.Creatures)
+            {
+                if (creature == null) continue;
+                if (creature.Side != CombatSide.Enemy) continue;
+                if (creature.Monster == null) continue;
+                if (creature.ShowsInfiniteHp) continue; // 无敌阶段不动
+
+                var scaled = (decimal)creature.MaxHp * mult;
+                if (scaled > MonsterRuntimeHpHelper.HpAmountCeiling) scaled = MonsterRuntimeHpHelper.HpAmountCeiling;
+                if (scaled < 1m) scaled = 1m;
+
+                creature.SetMaxHpInternal(scaled);
+                creature.SetCurrentHpInternal(scaled);
+            }
+        });
     }
 }
 
 /// <summary>
 /// 怪物伤害倍率：patch Hook.ModifyDamage 的 postfix。
 /// 战斗实际伤害和 AttackIntent 显示都走这条线，一个 patch 同时搞定两个场景。
+///
+/// <b>这是 hot path</b>——每次玩家计算攻击伤害预览、敌人意图显示、敌人实际攻击都触发。
+/// 早返检查按"最常 false" 排序：
+///   1. PatchScope.IsEnabled 检查（极快——读静态字段）
+///   2. dealer 是不是 enemy monster（早返掉所有玩家攻击的调用，绝大多数）
+///   3. 倍率是否 ≈1（act1-3 总是 true，直接早返不读 RunState）
+///   4. 业务计算
 /// </summary>
 [HarmonyPatch(typeof(Hook), nameof(Hook.ModifyDamage))]
 public static class MonsterDamageMultiplierPatch
 {
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void ApplyDamageMultiplier(
         IRunState runState,
@@ -156,16 +267,29 @@ public static class MonsterDamageMultiplierPatch
         Creature? dealer,
         ref decimal __result)
     {
+        if (!PatchScope.IsEnabled) return;
+
+        // dealer 检查放最前面：玩家攻击的调用占绝大多数，全部走这里早返
         if (dealer?.Monster == null) return;
-        // 关键：召唤物 / 玩家 pet（如 Osty）有 Monster 字段但属于 Player side。
+        // 召唤物 / 玩家 pet（如 Osty）有 Monster 字段但属于 Player side。
         // 它们的攻击不应被敌人伤害倍率放大；只放大真正的敌人攻击。
         if (dealer.Side != CombatSide.Enemy) return;
 
-        var (_, dmgMult) = DifficultyMultiplierContext.GetCurrentMultipliers(
-            runState, combatState?.Encounter);
+        // 必须在 act4/5 才介入——其他 act 不动
+        if (runState?.Act is not Act4Model && runState?.Act is not Act5Model) return;
 
-        if (Math.Abs(dmgMult - 1.0) < 1e-6) return;
+        try
+        {
+            var (_, dmgMult) = DifficultyMultiplierContext.GetCurrentMultipliers(
+                runState, combatState?.Encounter);
 
-        __result *= (decimal)dmgMult;
+            if (Math.Abs(dmgMult - 1.0) < 1e-6) return;
+
+            __result *= (decimal)dmgMult;
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"MonsterDamageMultiplierPatch failed: {ex}");
+        }
     }
 }

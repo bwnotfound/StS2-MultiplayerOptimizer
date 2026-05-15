@@ -19,17 +19,25 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///   IsActive=false （默认）：所有 patch 用本地 config，Save/Load 正常
 ///   ↓ client 收到 ConfigSyncMessage（在 BeginRunLocally 之前）
 ///   IsActive=true：本地静态字段已被 host 值覆盖，Save 被 WeightNormalizationPatch 拦截
-///   ↓ RunManager.CleanUpRun（run 结束）
+///   ↓ RunManager.CleanUp（run 结束）
 ///   IsActive=false：从磁盘 reload 恢复 client 原配置
 ///
 /// host 自己 IsActive 永远是 false——它用本地 config 即可，且需要正常保存。
 ///
-/// ## v0.2.0 新增：host 侧 ack 跟踪
+/// ## v0.4.0 改动：并发保护
 ///
-/// host 在 broadcast ConfigSyncMessage 时调 <see cref="RegisterPending"/> 分配 syncId 并记录所有 client；
-/// 每收到一个 <see cref="ConfigSyncAckMessage"/> 调 <see cref="RecordAck"/> 从 pending 中移除该 client。
-/// host 调 <see cref="WaitForAcksAsync"/> 异步等所有 ack（带超时）——超时即说明那个 client 的
-/// mod 版本太旧（没有 EarlyRegister patch 收不到 wrapper 消息），host 端 popup 警告并拒绝开 run。
+/// _pendingSyncs 字典和 _nextSyncId 之前在多个线程被读写：
+///   - 主线程：RegisterPending、WaitForAcksAsync.finally 清理
+///   - NetService 回调线程：RecordAck（消息反序列化后回调，不一定在主线程）
+///
+/// 现在所有 mutable state 操作都在 _pendingLock 内执行。lock 范围尽量小——
+/// async/await 之外，避免持锁等异步导致的死锁。
+///
+/// ## v0.4.0 改动：状态清理
+///
+/// 多了两个 lifecycle hook：
+///   - ClearActiveNetService：lobby 断线/销毁时调用，避免悬挂的 NetService 引用
+///   - ClearAllPending：异常恢复或测试时调用，清空所有 pending（避免泄漏）
 /// </summary>
 internal static class ConfigSyncManager
 {
@@ -43,7 +51,7 @@ internal static class ConfigSyncManager
     /// 当前激活的 NetService 引用。在 lobby 创建时由 EarlyRegister patch 设置，
     /// run 启动后跟 RunManager.NetService 是同一个对象（INetGameService 在 lobby 和 run 间共用）。
     ///
-    /// **为什么不用 RunManager.NetService**：RunManager.NetService 在 InitializeShared 才被赋值，
+    /// <b>为什么不用 RunManager.NetService</b>：RunManager.NetService 在 InitializeShared 才被赋值，
     /// 那是 run 启动后的事。但 ConfigSync 的整个 lifecycle 都在 lobby 阶段——broadcast、apply、
     /// ack 都发生在 RunManager.NetService 还是 null 的时候。如果 SendAck / IsLocalHost 依赖
     /// RunManager.NetService，lobby 期收到消息时找不到 NetService，sync 完全失效。
@@ -56,6 +64,15 @@ internal static class ConfigSyncManager
         _activeNetService = netService;
     }
 
+    /// <summary>
+    /// Lobby 销毁/disconnect 时调用，清空悬挂引用。
+    /// 如果不清理，下一次 lobby 重建前如果触发了 IsLocalHost() 检查，会拿到旧 NetService 给出错误答案。
+    /// </summary>
+    public static void ClearActiveNetService()
+    {
+        _activeNetService = null;
+    }
+
     private static INetGameService? CurrentNetService =>
         _activeNetService ?? RunManager.Instance?.NetService;
 
@@ -64,8 +81,15 @@ internal static class ConfigSyncManager
     /// </summary>
     public static bool IsLocalHost()
     {
-        var net = CurrentNetService;
-        return net != null && net.Type == NetGameType.Host;
+        try
+        {
+            var net = CurrentNetService;
+            return net != null && net.Type == NetGameType.Host;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     // ============================================================
@@ -159,26 +183,33 @@ internal static class ConfigSyncManager
     /// <summary>Client 端 apply 完后回 ack 给 host。</summary>
     public static void SendAck(ulong syncId, ApplyResult result)
     {
-        var net = CurrentNetService;
-        if (net == null)
+        try
         {
-            MainFile.Logger.Warn(
-                "[Sync] Cannot send ack: no active NetService (lobby not registered, RunManager not initialized). " +
-                "This shouldn't happen if EarlyRegister patch ran. ConfigSync will not complete.");
-            return;
-        }
+            var net = CurrentNetService;
+            if (net == null)
+            {
+                MainFile.Logger.Warn(
+                    "[Sync] Cannot send ack: no active NetService (lobby not registered, RunManager not initialized). " +
+                    "This shouldn't happen if EarlyRegister patch ran. ConfigSync will not complete.");
+                return;
+            }
 
-        var ack = new ConfigSyncAckMessage
+            var ack = new ConfigSyncAckMessage
+            {
+                SyncId = syncId,
+                ClientModVersion = MainFile.ModVersion,
+                AppliedDoubles = result.AppliedDoubles,
+                SkippedDoubles = result.SkippedDoubles,
+                AppliedBools = result.AppliedBools,
+                SkippedBools = result.SkippedBools
+            };
+            net.SendMessage(new CustomMessageWrapper { Message = ack });
+            MainFile.Logger.Info($"[Sync] Sent ack for syncId={syncId} to host");
+        }
+        catch (Exception ex)
         {
-            SyncId = syncId,
-            ClientModVersion = MainFile.ModVersion,
-            AppliedDoubles = result.AppliedDoubles,
-            SkippedDoubles = result.SkippedDoubles,
-            AppliedBools = result.AppliedBools,
-            SkippedBools = result.SkippedBools
-        };
-        net.SendMessage(new CustomMessageWrapper { Message = ack });
-        MainFile.Logger.Info($"[Sync] Sent ack for syncId={syncId} to host");
+            MainFile.Logger.Error($"[Sync] SendAck failed for syncId={syncId}: {ex}");
+        }
     }
 
     /// <summary>
@@ -205,13 +236,23 @@ internal static class ConfigSyncManager
     }
 
     // ============================================================
-    // Host 端 ack 跟踪
+    // Host 端 ack 跟踪（并发保护）
     // ============================================================
 
     /// <summary>
     /// Host 端进入 BeginRunForAllPlayers 时设为 true，避免我们的 patch 在异步任务回调原方法时重入。
+    /// volatile：主线程写 + 异步 task 写，跨线程必须可见。
     /// </summary>
-    public static bool IsReenteringBeginRun { get; set; }
+    private static volatile bool _isReenteringBeginRun;
+
+    public static bool IsReenteringBeginRun
+    {
+        get => _isReenteringBeginRun;
+        set => _isReenteringBeginRun = value;
+    }
+
+    /// <summary>所有 _pendingSyncs / _nextSyncId 的并发保护。</summary>
+    private static readonly object _pendingLock = new();
 
     private static ulong _nextSyncId = 1;
     private static readonly Dictionary<ulong, PendingSync> _pendingSyncs = new();
@@ -239,34 +280,48 @@ internal static class ConfigSyncManager
     /// </summary>
     public static ulong RegisterPending(IEnumerable<ulong> clientIds)
     {
-        var syncId = _nextSyncId++;
         var pending = new PendingSync
         {
             RemainingClients = new HashSet<ulong>(clientIds)
         };
-        _pendingSyncs[syncId] = pending;
 
-        if (pending.RemainingClients.Count == 0) pending.Completion.TrySetResult(true);
+        ulong syncId;
+        lock (_pendingLock)
+        {
+            syncId = _nextSyncId++;
+            _pendingSyncs[syncId] = pending;
+        }
+
+        // TrySetResult 在 lock 外——TaskCompletionSource 是线程安全的
+        if (pending.RemainingClients.Count == 0)
+            pending.Completion.TrySetResult(true);
 
         return syncId;
     }
 
     /// <summary>
-    /// Host 端：收到 client 的 ack 时调用，从对应 pending 移除该 client。
+    /// Host 端：收到 client 的 ack 时调用（可能从 NetService 回调线程进入），从对应 pending 移除该 client。
     /// 全部 ack 收齐后自动解锁 WaitForAcksAsync。
     /// </summary>
     public static void RecordAck(ConfigSyncAckMessage ack, ulong senderId)
     {
-        if (!_pendingSyncs.TryGetValue(ack.SyncId, out var pending))
-        {
-            MainFile.Logger.Warn(
-                $"[Sync] Received ack for unknown syncId={ack.SyncId} from {senderId} " +
-                $"(version={ack.ClientModVersion})");
-            return;
-        }
+        PendingSync? pending;
+        bool complete;
 
-        pending.RemainingClients.Remove(senderId);
-        pending.ReceivedAcks[senderId] = ack;
+        lock (_pendingLock)
+        {
+            if (!_pendingSyncs.TryGetValue(ack.SyncId, out pending))
+            {
+                MainFile.Logger.Warn(
+                    $"[Sync] Received ack for unknown syncId={ack.SyncId} from {senderId} " +
+                    $"(version={ack.ClientModVersion})");
+                return;
+            }
+
+            pending.RemainingClients.Remove(senderId);
+            pending.ReceivedAcks[senderId] = ack;
+            complete = pending.RemainingClients.Count == 0;
+        }
 
         var versionStr = ack.ClientModVersion == MainFile.ModVersion
             ? ack.ClientModVersion
@@ -275,7 +330,7 @@ internal static class ConfigSyncManager
             $"[Sync] Received ack for syncId={ack.SyncId} from {senderId} version={versionStr}, " +
             $"applied {ack.AppliedDoubles}D+{ack.AppliedBools}B, skipped {ack.SkippedDoubles}D+{ack.SkippedBools}B");
 
-        if (pending.RemainingClients.Count == 0) pending.Completion.TrySetResult(true);
+        if (complete) pending.Completion.TrySetResult(true);
     }
 
     /// <summary>
@@ -284,30 +339,58 @@ internal static class ConfigSyncManager
     /// </summary>
     public static async Task<AckResult> WaitForAcksAsync(ulong syncId, int timeoutMs)
     {
-        if (!_pendingSyncs.TryGetValue(syncId, out var pending)) return new AckResult { AllAcked = false };
+        PendingSync? pending;
+        lock (_pendingLock)
+        {
+            if (!_pendingSyncs.TryGetValue(syncId, out pending))
+                return new AckResult { AllAcked = false };
+        }
 
         try
         {
             var timeoutTask = Task.Delay(timeoutMs);
-            var completed = await Task.WhenAny(pending.Completion.Task, timeoutTask);
+            var completed = await Task.WhenAny(pending.Completion.Task, timeoutTask).ConfigureAwait(false);
 
             var allAcked = completed == pending.Completion.Task;
-            return new AckResult
+
+            // 读 pending 内部集合时也加锁——RecordAck 可能仍在修改（虽然此时一般不会）
+            lock (_pendingLock)
             {
-                AllAcked = allAcked,
-                MissingClients = new List<ulong>(pending.RemainingClients),
-                ReceivedAcks = new Dictionary<ulong, ConfigSyncAckMessage>(pending.ReceivedAcks)
-            };
+                return new AckResult
+                {
+                    AllAcked = allAcked,
+                    MissingClients = new List<ulong>(pending.RemainingClients),
+                    ReceivedAcks = new Dictionary<ulong, ConfigSyncAckMessage>(pending.ReceivedAcks)
+                };
+            }
         }
         finally
         {
-            _pendingSyncs.Remove(syncId);
+            lock (_pendingLock)
+            {
+                _pendingSyncs.Remove(syncId);
+            }
         }
     }
 
-    /// <summary>测试钩子：检查指定 syncId 的 pending 是否存在（防止单元测试或调试需要）。</summary>
+    /// <summary>
+    /// 清空所有 pending（异常恢复用）。
+    /// 已经在等待的 WaitForAcksAsync 不会被中断——它们会按超时正常返回。
+    /// </summary>
+    public static void ClearAllPending()
+    {
+        lock (_pendingLock)
+        {
+            _pendingSyncs.Clear();
+        }
+    }
+
+    /// <summary>测试钩子：检查指定 syncId 的 pending 是否存在。</summary>
     public static bool HasPending(ulong syncId)
     {
-        return _pendingSyncs.ContainsKey(syncId);
+        lock (_pendingLock)
+        {
+            return _pendingSyncs.ContainsKey(syncId);
+        }
     }
 }

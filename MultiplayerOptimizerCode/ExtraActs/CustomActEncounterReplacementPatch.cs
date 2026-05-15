@@ -26,71 +26,82 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///       用 EncounterListBuilder.FillWithWeightedPools 填充 list。
 ///
 /// 多人同步：rng 序列各端一致 → 替换结果一致。
+///
+/// ## Harmony ordering
+/// [HarmonyAfter("BaseLib")]：BaseLib 的 ActModelGenerateRoomsPatch 也 patch ActModel.GenerateRooms
+/// postfix，处理 Ancient 注入。它对 normalEncounters/eliteEncounters 不动，跟我们正交。
+/// 显式声明 After 是为了 robustness——万一 BaseLib 将来也改 encounters，我们的逻辑作为更晚的
+/// patch 来"修正"它的输出。
 /// </summary>
 [HarmonyPatch(typeof(ActModel), nameof(ActModel.GenerateRooms))]
+[HarmonyAfter("BaseLib")]
 public static class CustomActEncounterReplacementPatch
 {
-    private static readonly FieldInfo RoomsField =
+    private static readonly FieldInfo? RoomsField =
         AccessTools.Field(typeof(ActModel), "_rooms");
 
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void ReplaceEncounters(ActModel __instance, Rng rng)
     {
-        if (__instance is not Act4Model && __instance is not Act5Model)
-            return;
+        if (!PatchScope.IsEnabled) return;
+        if (__instance is not Act4Model && __instance is not Act5Model) return;
 
-        var rooms = RoomsField?.GetValue(__instance) as RoomSet;
-        if (rooms == null)
+        PatchScope.Run(nameof(CustomActEncounterReplacementPatch), () =>
         {
-            MainFile.Logger.Error(
-                $"[ExtraActs] Failed to access _rooms on {__instance.Id.Entry}; encounter replacement skipped");
-            return;
-        }
-
-        if (__instance is Act4Model)
-        {
-            // Act4: elite 内容用加权混合的 1+2+3 elite encounters 填充
-            // 不过滤 boss 池开关——这里用的是 elite 池
-            var w = ExtraActsConfig.GetEncounterWeights(4);
-            var pools = new List<(IReadOnlyList<EncounterModel>, double)>
+            var rooms = RoomsField?.GetValue(__instance) as RoomSet;
+            if (rooms == null)
             {
-                (ModelDb.Act<Overgrowth>().AllEliteEncounters.ToList(), w.Act1),
-                (ModelDb.Act<Hive>().AllEliteEncounters.ToList(), w.Act2),
-                (ModelDb.Act<Glory>().AllEliteEncounters.ToList(), w.Act3)
-            };
-            var targetCount = rooms.eliteEncounters.Count;
-            EncounterListBuilder.FillWithWeightedPools(
-                rooms.eliteEncounters, targetCount, pools, rng);
+                MainFile.Logger.Error(
+                    $"Failed to access _rooms on {__instance.Id.Entry}; encounter replacement skipped");
+                return;
+            }
 
-            var totalPoolSize = pools.Sum(p => p.Item1.Count);
-            MainFile.Logger.Info(
-                $"[ExtraActs] Act4: refilled {targetCount} elite encounters " +
-                $"(weights {w.Act1}/{w.Act2}/{w.Act3}, distinct pool size {totalPoolSize})");
-        }
-        else if (__instance is Act5Model)
-        {
-            // Act5: normal + elite 内容都用加权混合的 1+2+3 boss encounters 填充
-            // 经过 ApplyBossPoolFilters 应用 ExcludeDoormakerFromBossPool 等 boss 池过滤开关
-            var w = ExtraActsConfig.GetBossWeights(5);
-            var pools = new List<(IReadOnlyList<EncounterModel>, double)>
+            if (__instance is Act4Model)
             {
-                (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Overgrowth>().AllBossEncounters), w.Act1),
-                (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Hive>().AllBossEncounters), w.Act2),
-                (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Glory>().AllBossEncounters), w.Act3)
-            };
+                // Act4: elite 内容用加权混合的 1+2+3 elite encounters 填充
+                // 不过滤 boss 池开关——这里用的是 elite 池
+                var w = ExtraActsConfig.GetEncounterWeights(4);
+                var pools = new List<(IReadOnlyList<EncounterModel>, double)>
+                {
+                    (ModelDb.Act<Overgrowth>().AllEliteEncounters.ToList(), w.Act1),
+                    (ModelDb.Act<Hive>().AllEliteEncounters.ToList(), w.Act2),
+                    (ModelDb.Act<Glory>().AllEliteEncounters.ToList(), w.Act3)
+                };
+                var targetCount = rooms.eliteEncounters.Count;
+                EncounterListBuilder.FillWithWeightedPools(
+                    rooms.eliteEncounters, targetCount, pools, rng);
 
-            var normalCount = rooms.normalEncounters.Count;
-            EncounterListBuilder.FillWithWeightedPools(
-                rooms.normalEncounters, normalCount, pools, rng);
+                var totalPoolSize = pools.Sum(p => p.Item1.Count);
+                MainFile.Logger.Info(
+                    $"Act4: refilled {targetCount} elite encounters " +
+                    $"(weights {w.Act1}/{w.Act2}/{w.Act3}, distinct pool size {totalPoolSize})");
+            }
+            else // Act5Model
+            {
+                // Act5: normal + elite 内容都用加权混合的 1+2+3 boss encounters 填充
+                // 经过 ApplyBossPoolFilters 应用 ExcludeDoormakerFromBossPool 等 boss 池过滤开关
+                var w = ExtraActsConfig.GetBossWeights(5);
+                var pools = new List<(IReadOnlyList<EncounterModel>, double)>
+                {
+                    (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Overgrowth>().AllBossEncounters), w.Act1),
+                    (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Hive>().AllBossEncounters), w.Act2),
+                    (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Glory>().AllBossEncounters), w.Act3)
+                };
 
-            var eliteCount = rooms.eliteEncounters.Count;
-            EncounterListBuilder.FillWithWeightedPools(
-                rooms.eliteEncounters, eliteCount, pools, rng);
+                var normalCount = rooms.normalEncounters.Count;
+                EncounterListBuilder.FillWithWeightedPools(
+                    rooms.normalEncounters, normalCount, pools, rng);
 
-            var totalPoolSize = pools.Sum(p => p.Item1.Count);
-            MainFile.Logger.Info(
-                $"[ExtraActs] Act5: replaced {normalCount} normal + {eliteCount} elite with boss content " +
-                $"(weights {w.Act1}/{w.Act2}/{w.Act3}, distinct pool size {totalPoolSize})");
-        }
+                var eliteCount = rooms.eliteEncounters.Count;
+                EncounterListBuilder.FillWithWeightedPools(
+                    rooms.eliteEncounters, eliteCount, pools, rng);
+
+                var totalPoolSize = pools.Sum(p => p.Item1.Count);
+                MainFile.Logger.Info(
+                    $"Act5: replaced {normalCount} normal + {eliteCount} elite with boss content " +
+                    $"(weights {w.Act1}/{w.Act2}/{w.Act3}, distinct pool size {totalPoolSize})");
+            }
+        });
     }
 }

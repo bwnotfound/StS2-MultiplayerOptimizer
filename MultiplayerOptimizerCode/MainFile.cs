@@ -1,21 +1,22 @@
-using System;
+﻿using System;
 using System.Linq;
-using System.Reflection;
 using BaseLib.Config;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
-using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode;
 
+/// <summary>
+/// Mod 入口。负责注册配置、引导自定义 act、应用 Harmony patch。
+/// </summary>
 [ModInitializer(nameof(Initialize))]
 public partial class MainFile : Node
 {
     public const string ModId = "MultiplayerOptimizer";
 
-    // ModVersion 运行时从 manifest 读，避免代码 const 跟 manifest 漂移。
+    // ModVersion 从 manifest 运行时读取，避免代码常量与 manifest 漂移。
     // 只缓存有效值——查不到时不缓存 "unknown"，允许后续重试。
     private static string? _cachedModVersion;
 
@@ -48,72 +49,37 @@ public partial class MainFile : Node
 
     public static void Initialize()
     {
-        Logger.Info($"[Init] Loading {ModId} version {ModVersion}");
+        Logger.Info($"Loading {ModId} {ModVersion}");
 
-        ModConfigRegistry.Register(ModId, new MultiplayerOptimizerConfig());
-        ExtraActsBootstrap.Initialize();
-
-        Harmony harmony = new(ModId);
-
-        // ============================================================
-        // PatchAll + 诊断
-        // 临时附加：暴露 Harmony 是否 silent-miss 某些 patch（如 lobby ctor）
-        // 朋友机器上 EarlyRegister postfix 没跑，需要 log 来锁定具体原因。
-        // 排查完毕后这一整段可以删掉。
-        // ============================================================
         try
         {
+            ModConfigRegistry.Register(ModId, new MultiplayerOptimizerConfig());
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"ModConfigRegistry.Register failed: {ex}");
+        }
+
+        try
+        {
+            ExtraActsBootstrap.Initialize();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"ExtraActsBootstrap.Initialize failed: {ex}");
+        }
+
+        // Harmony.PatchAll 整体包 try/catch：单个 patch class 内部异常会被 Harmony 包成
+        // HarmonyException 抛出，且**会中断剩余 patch 的应用**。我们宁可某个 patch 没生效，
+        // 也不希望整个 mod 因为一个 patch 出错就完全失效。
+        try
+        {
+            var harmony = new Harmony(ModId);
             harmony.PatchAll();
-            Logger.Info("[Diagnostic] Harmony PatchAll completed without throwing");
         }
         catch (Exception ex)
         {
-            Logger.Error($"[Diagnostic] Harmony PatchAll THREW: {ex}");
-        }
-
-        // 诊断 1: 列出 Harmony 实际绑定到的方法。
-        // 如果 StartRunLobby/LoadRunLobby 的 ctor 不在列表 = patch 没绑上（silent miss）
-        try
-        {
-            var patched = harmony.GetPatchedMethods().ToList();
-            Logger.Info($"[Diagnostic] Harmony bound {patched.Count} method(s):");
-            foreach (var m in patched)
-            {
-                var cls = m.DeclaringType?.FullName ?? "?";
-                var name = m is ConstructorInfo ? ".ctor" : m.Name;
-                var sig = string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name));
-                Logger.Info($"[Diagnostic]   - {cls}::{name}({sig})");
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"[Diagnostic] GetPatchedMethods failed: {ex}");
-        }
-
-        // 诊断 2: 朋友 base game 实际的 StartRunLobby / LoadRunLobby ctor 签名。
-        // 如果 dev 反编译版本跟朋友 v0.103.2 不一致，签名会不同 →
-        // [HarmonyPatch(MethodType.Constructor, new[] {...})] 没法 bind
-        DiagnoseCtorSignatures(typeof(StartRunLobby));
-        DiagnoseCtorSignatures(typeof(LoadRunLobby));
-    }
-
-    private static void DiagnoseCtorSignatures(Type t)
-    {
-        try
-        {
-            var ctors = t.GetConstructors(
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            Logger.Info($"[Diagnostic] {t.FullName} has {ctors.Length} ctor(s):");
-            foreach (var c in ctors)
-            {
-                var sig = string.Join(", ",
-                    c.GetParameters().Select(p => p.ParameterType.FullName));
-                Logger.Info($"[Diagnostic]   {t.Name}({sig})");
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"[Diagnostic] DiagnoseCtorSignatures({t.FullName}) failed: {ex}");
+            Logger.Error($"Harmony PatchAll failed: {ex}");
         }
     }
 }

@@ -1,7 +1,5 @@
-﻿using System.Collections.Generic;
-using HarmonyLib;
+﻿using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes.Audio;
-using MegaCrit.Sts2.Core.Runs;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 
@@ -25,16 +23,18 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 /// act5 复用 Glory 的 bank（act3_*）。当 act4 final boss 抽到 vantom（act1）时，
 /// `act1_boss_vantom` event 不在 act2 bank 里 → audio engine 找不到 → 无声 + log error。
 ///
-/// 修法：patch PlayCustomMusic 的 prefix，对 act4/5 战斗，如果 customMusic 不是 boss event
-/// 或者属于当前 bank 已知含有的 entry，直接放行；否则 fallback 到当前 act bank 内已知能播的
-/// 一首 boss bgm。
+/// 修法：patch PlayCustomMusic 的 prefix，对 act4/5 战斗，如果 customMusic 不是当前 bank 内的
+/// event，fallback 到当前 act bank 内已知能播的一首 boss bgm。
 ///
 /// fallback 选曲：
 ///   - act4 (Hive bank, act2_*) → act2_boss_knowledge_demon
 ///   - act5 (Glory bank, act3_*) → act3_boss_queen
 /// 这样所有 act4 final boss 都用 KnowledgeDemon 的 bgm，所有 act5 final boss 都用 Queen 的 bgm。
-/// 丢失了"boss 各有专属 bgm"的体验，但保证有声。如果未来发现某 boss bgm 也在 bank 内但被这个
-/// patch 误杀，可以加到 BankExtras 白名单。
+/// 丢失了"boss 各有专属 bgm"的体验，但保证有声。
+///
+/// ## v0.4.0：白名单数据驱动
+/// 跨 bank 复用的 event（如 ceremonial_beast 同时存在于多个 bank）放在
+/// <see cref="ExtraActsConfig.Act3BankCrossActExtras"/> 集合里，避免硬编码字典在多个文件之间重复。
 /// </summary>
 [HarmonyPatch(typeof(NRunMusicController), nameof(NRunMusicController.PlayCustomMusic))]
 public static class CustomActMissingBgmFallbackPatch
@@ -45,46 +45,49 @@ public static class CustomActMissingBgmFallbackPatch
     // act5 (Glory bank) 兜底曲：QueenBoss 的 bgm，必在 act3 bank 内
     private const string Act5FallbackTrack = "event:/music/act3_boss_queen";
 
-    // act2 bank 已知含有的"非 act2_ 前缀"entry。CeremonialBeastBoss 是 act2 的 boss
-    // 但 CustomBgm 写的是 act1_boss_ceremonial_beast —— act2 bank 里有这个 entry。
-    private static readonly HashSet<string> Act2BankCrossActExtras = new()
-    {
-        "event:/music/act1_boss_ceremonial_beast"
-    };
-
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPrefix]
     public static void Prefix(ref string customMusic)
     {
+        if (!PatchScope.IsEnabled) return;
         if (string.IsNullOrEmpty(customMusic)) return;
 
-        // 只关心 boss bgm —— 含"_boss_"段的才介入。其他 PlayCustomMusic 调用（事件/特殊曲）不动。
+        // 只关心 boss bgm —— 含 "_boss_" 段的才介入。其他 PlayCustomMusic 调用（事件/特殊曲）不动。
         if (!customMusic.Contains("_boss_")) return;
 
-        var rm = RunManager.Instance;
-        if (rm == null) return;
-        var state = RunStateAccessor.GetState(rm);
-        if (state == null) return;
+        // 用局部变量绕过 ref 不能被 lambda 捕获的限制
+        var music = customMusic;
+        var replaced = PatchScope.Run<string?>(nameof(CustomActMissingBgmFallbackPatch), () =>
+        {
+            if (!PatchScope.TryEnter(out var ctx)) return null;
 
-        if (state.Act is Act4Model)
-        {
-            // act4 用 act2_a1 / act2_a2 bank（Hive 的 MusicBankPaths）
-            if (customMusic.StartsWith("event:/music/act2_")) return;
-            if (Act2BankCrossActExtras.Contains(customMusic)) return;
-            // 其他都 fallback
-            MainFile.Logger.Info(
-                $"[ExtraActs] act4 boss bgm fallback: '{customMusic}' not in act2 bank, " +
-                $"replacing with '{Act4FallbackTrack}'");
-            customMusic = Act4FallbackTrack;
-        }
-        else if (state.Act is Act5Model)
-        {
-            // act5 用 act3_a1 / act3_a2 bank（Glory 的 MusicBankPaths）
-            if (customMusic.StartsWith("event:/music/act3_")) return;
-            // 其他都 fallback
-            MainFile.Logger.Info(
-                $"[ExtraActs] act5 boss bgm fallback: '{customMusic}' not in act3 bank, " +
-                $"replacing with '{Act5FallbackTrack}'");
-            customMusic = Act5FallbackTrack;
-        }
+            if (ctx.IsAct4)
+            {
+                // act4 用 act2_a1 / act2_a2 bank（Hive 的 MusicBankPaths）
+                if (music.StartsWith("event:/music/act2_")) return null;
+                if (ExtraActsConfig.Act3BankCrossActExtras.Contains(music)) return null;
+
+                MainFile.Logger.Info(
+                    $"act4 boss bgm fallback: '{music}' not in act2 bank, " +
+                    $"replacing with '{Act4FallbackTrack}'");
+                return Act4FallbackTrack;
+            }
+
+            if (ctx.IsAct5)
+            {
+                // act5 用 act3_a1 / act3_a2 bank（Glory 的 MusicBankPaths）
+                if (music.StartsWith("event:/music/act3_")) return null;
+                if (ExtraActsConfig.Act3BankCrossActExtras.Contains(music)) return null;
+
+                MainFile.Logger.Info(
+                    $"act5 boss bgm fallback: '{music}' not in act3 bank, " +
+                    $"replacing with '{Act5FallbackTrack}'");
+                return Act5FallbackTrack;
+            }
+
+            return null;
+        });
+
+        if (replaced != null) customMusic = replaced;
     }
 }

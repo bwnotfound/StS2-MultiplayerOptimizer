@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System;
+using System.Reflection;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -15,23 +16,55 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 /// BaseLib 自己也是用同样的反射方式（参见 CurrentGeneratingRunState）。
 /// 我们独立定义一份，避免依赖 BaseLib 内部 patch 的状态字段时序。
 ///
-/// 性能：MethodInfo 只解析一次（静态字段），调用 Invoke 比直接访问稍慢
-/// 但相比 GenerateRooms / GenerateMap 这种"每 run 几次"的低频场景完全可忽略。
+/// ## 性能
+/// 把 MethodInfo.Invoke 用 CreateDelegate 升级成强类型委托，调用开销和直接访问属性基本相同。
+/// 因为 PatchScope.TryEnter 在每个 patch 入口都会调用一次 GetState（包括 hot path 上的
+/// CombatRoom.RoomType getter 等等），这里值得做一次性优化。
+///
+/// ## 错误处理
+/// 反射解析失败（base game 重命名属性等极端情况）只 log 一次，避免刷屏。
 /// </summary>
 internal static class RunStateAccessor
 {
-    private static readonly MethodInfo? StateGetter =
-        AccessTools.PropertyGetter(typeof(RunManager), "State");
+    private static readonly Func<RunManager, RunState?>? StateGetter = TryBuildGetter();
+
+    /// <summary>解析失败时记录一次错误，之后静默。</summary>
+    private static bool _loggedFailure;
+
+    private static Func<RunManager, RunState?>? TryBuildGetter()
+    {
+        try
+        {
+            var mi = AccessTools.PropertyGetter(typeof(RunManager), "State");
+            if (mi == null) return null;
+            // 强类型委托避免每次调用都走 reflection invoke 路径
+            return (Func<RunManager, RunState?>)Delegate.CreateDelegate(
+                typeof(Func<RunManager, RunState?>), mi);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     public static RunState? GetState(RunManager runManager)
     {
-        if (StateGetter == null)
+        if (StateGetter != null) return StateGetter(runManager);
+
+        if (!_loggedFailure)
         {
-            MainFile.Logger.Error(
-                "[ExtraActs] Could not resolve RunManager.State getter via reflection!");
-            return null;
+            _loggedFailure = true;
+            try
+            {
+                MainFile.Logger.Error(
+                    "Could not resolve RunManager.State getter via reflection.");
+            }
+            catch
+            {
+                // logger 也挂了，没办法
+            }
         }
 
-        return (RunState?)StateGetter.Invoke(runManager, null);
+        return null;
     }
 }

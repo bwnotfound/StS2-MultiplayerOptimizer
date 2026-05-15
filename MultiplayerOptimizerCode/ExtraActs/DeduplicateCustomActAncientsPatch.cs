@@ -26,65 +26,78 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 /// 给 act4/5 重抽避开前面用过的（包括 act1/2/3 + 前一个 custom act）。
 ///
 /// 用 state.Rng.UpFront 保证多人确定性。
+///
+/// ## Harmony ordering
+/// [HarmonyAfter("BaseLib")]：BaseLib 的 ActModelGenerateRoomsPatch（patch ActModel.GenerateRooms）
+/// 会强制设置某些 ShouldForceSpawn 的 ancient。我们 patch 的是 RunManager.GenerateRooms（外层），
+/// 在 ActModel.GenerateRooms 跑完之后才进。语义上我们一定排在 BaseLib 后面（外 prefix → 内 prefix
+/// → 内方法 → 内 postfix → 外 postfix）。但显式声明 After 防御未来 BaseLib 改 patch 目标。
 /// </summary>
 [HarmonyPatch(typeof(RunManager), nameof(RunManager.GenerateRooms))]
+[HarmonyAfter("BaseLib")]
 public static class DeduplicateCustomActAncientsPatch
 {
-    private static readonly FieldInfo RoomsField =
+    private static readonly FieldInfo? RoomsField =
         AccessTools.Field(typeof(ActModel), "_rooms");
 
-    private static readonly FieldInfo SharedAncientSubsetField =
+    private static readonly FieldInfo? SharedAncientSubsetField =
         AccessTools.Field(typeof(ActModel), "_sharedAncientSubset");
 
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static void DeduplicateAncients(RunManager __instance)
     {
-        var state = RunStateAccessor.GetState(__instance);
-        if (state == null) return;
+        if (!PatchScope.IsEnabled) return;
 
-        var usedAncientIds = new HashSet<string>();
-
-        for (var i = 0; i < state.Acts.Count; i++)
+        PatchScope.Run(nameof(DeduplicateCustomActAncientsPatch), () =>
         {
-            var act = state.Acts[i];
-            var rooms = RoomsField?.GetValue(act) as RoomSet;
-            if (rooms == null || !rooms.HasAncient) continue;
+            var state = RunStateAccessor.GetState(__instance);
+            if (state == null) return;
 
-            var currentId = rooms.Ancient.Id.Entry;
+            var usedAncientIds = new HashSet<string>();
 
-            // 只对 custom act 重抽；act1-3 / 其他 base act 保持原结果（但仍把它们的 ancient 加入 used set）
-            var isCustomAct = act is Act4Model || act is Act5Model;
-
-            if (isCustomAct && usedAncientIds.Contains(currentId))
+            for (var i = 0; i < state.Acts.Count; i++)
             {
-                // 构造可选池：act 自己的 GetUnlockedAncients + sharedSubset
-                var sharedSubset = SharedAncientSubsetField?.GetValue(act) as List<AncientEventModel>
-                                   ?? new List<AncientEventModel>();
+                var act = state.Acts[i];
+                var rooms = RoomsField?.GetValue(act) as RoomSet;
+                if (rooms == null || !rooms.HasAncient) continue;
 
-                var available = act.GetUnlockedAncients(state.UnlockState)
-                    .Concat(sharedSubset)
-                    .Where(a => !usedAncientIds.Contains(a.Id.Entry))
-                    .Distinct()
-                    .ToList();
+                var currentId = rooms.Ancient.Id.Entry;
 
-                if (available.Count > 0)
+                // 只对 custom act 重抽；act1-3 / 其他 base act 保持原结果（但仍把它们的 ancient 加入 used set）
+                var isCustomAct = act is Act4Model || act is Act5Model;
+
+                if (isCustomAct && usedAncientIds.Contains(currentId))
                 {
-                    var picked = state.Rng.UpFront.NextItem(available);
-                    rooms.Ancient = picked!;
-                    MainFile.Logger.Info(
-                        $"[ExtraActs] {act.Id.Entry} ancient re-rolled to avoid duplicate: " +
-                        $"'{currentId}' -> '{picked!.Id.Entry}' (avoided: [{string.Join(", ", usedAncientIds)}])");
-                    currentId = picked.Id.Entry;
+                    // 构造可选池：act 自己的 GetUnlockedAncients + sharedSubset
+                    var sharedSubset = SharedAncientSubsetField?.GetValue(act) as List<AncientEventModel>
+                                       ?? new List<AncientEventModel>();
+
+                    var available = act.GetUnlockedAncients(state.UnlockState)
+                        .Concat(sharedSubset)
+                        .Where(a => !usedAncientIds.Contains(a.Id.Entry))
+                        .Distinct()
+                        .ToList();
+
+                    if (available.Count > 0)
+                    {
+                        var picked = state.Rng.UpFront.NextItem(available);
+                        rooms.Ancient = picked!;
+                        MainFile.Logger.Info(
+                            $"{act.Id.Entry} ancient re-rolled to avoid duplicate: " +
+                            $"'{currentId}' -> '{picked!.Id.Entry}' (avoided: [{string.Join(", ", usedAncientIds)}])");
+                        currentId = picked.Id.Entry;
+                    }
+                    else
+                    {
+                        MainFile.Logger.Warn(
+                            $"{act.Id.Entry} cannot reroll ancient: " +
+                            $"no alternatives in pool (avoided: [{string.Join(", ", usedAncientIds)}])");
+                    }
                 }
-                else
-                {
-                    MainFile.Logger.Warn(
-                        $"[ExtraActs] {act.Id.Entry} cannot reroll ancient: " +
-                        $"no alternatives in pool (avoided: [{string.Join(", ", usedAncientIds)}])");
-                }
+
+                usedAncientIds.Add(currentId);
             }
-
-            usedAncientIds.Add(currentId);
-        }
+        });
     }
 }

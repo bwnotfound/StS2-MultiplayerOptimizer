@@ -19,11 +19,17 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///
 /// 多人同步：所有客户端都装这个 mod，host/client 各自独立调用 GetRandomList，
 /// 用同一种子 → 各端独立得到完全相同的 5-act 列表。无需额外网络同步代码。
+///
+/// ## 不 honor PatchScope.IsEnabled
+/// 这个 patch 决定 run manifest 包含哪些 act。Enabled 切换不能改变 manifest——否则同一存档
+/// 在 Enabled=true 和 false 之间切换时 act 数量会变，存档加载错乱。所以无论 Enabled 状态，
+/// 都正常 append。具体的"自定义 act 行为"由其他 patch 在运行期分别 honor Enabled。
 /// </summary>
 [HarmonyPatch(typeof(ActModel), nameof(ActModel.GetRandomList))]
 [HarmonyAfter("BaseLib")] // 确保排在 BaseLib 的 ActModelGetRandomListPatch 之后
 public static class ExpandActListPatch
 {
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPostfix]
     public static IEnumerable<ActModel> AppendExtraActs(
         IEnumerable<ActModel> __result,
@@ -31,16 +37,24 @@ public static class ExpandActListPatch
         UnlockState unlockState,
         bool isMultiplayer)
     {
-        var list = __result.ToList();
+        // 即使出错也要返回原 __result，避免 base game 拿到 null
+        try
+        {
+            var list = __result.ToList();
 
-        if (ExtraActsBootstrap.Act4 != null) list.Add(ExtraActsBootstrap.Act4);
+            if (ExtraActsBootstrap.Act4 != null) list.Add(ExtraActsBootstrap.Act4);
+            if (ExtraActsBootstrap.Act5 != null) list.Add(ExtraActsBootstrap.Act5);
 
-        if (ExtraActsBootstrap.Act5 != null) list.Add(ExtraActsBootstrap.Act5);
+            MainFile.Logger.Info(
+                $"Final act list ({list.Count}): " +
+                string.Join(" -> ", list.Select(a => a.Id.Entry)));
 
-        MainFile.Logger.Info(
-            $"[ExtraActs] Final act list ({list.Count}): " +
-            string.Join(" -> ", list.Select(a => a.Id.Entry)));
-
-        return list;
+            return list;
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"ExpandActListPatch failed: {ex}");
+            return __result;
+        }
     }
 }

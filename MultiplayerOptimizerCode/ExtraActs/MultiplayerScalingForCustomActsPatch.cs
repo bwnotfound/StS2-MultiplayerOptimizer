@@ -26,18 +26,33 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 ///   - base 缩放：每多 1 玩家加多少 HP（按玩家数 scale）
 ///   - mod 倍率：act4/5 怪整体加多少 HP（按 act 难度 scale）
 /// 两者乘起来生效。
+///
+/// ## 不 honor PatchScope.IsEnabled
+/// 即使 Enabled=false 也必须 patch——base game 看到 actIndex=3/4 会 throw。我们的 ExpandActListPatch
+/// 不 honor Enabled 所以自定义 act 仍存在；这里也必须始终拦截，否则 act4/5 战斗一开始就 crash。
 /// </summary>
 [HarmonyPatch(typeof(MultiplayerScalingModel), nameof(MultiplayerScalingModel.GetMultiplayerScaling))]
 public static class MultiplayerScalingForCustomActsPatch
 {
+    [HarmonyPriority(Priority.Low)]
     [HarmonyPrefix]
     public static bool Prefix(EncounterModel? encounter, int actIndex, ref decimal __result)
     {
-        // act1/2/3 让原方法处理
-        if (actIndex <= 2) return true;
+        try
+        {
+            // act1/2/3 让原方法处理
+            if (actIndex <= 2) return true;
 
-        // act4/5 沿用 act3 的系数：boss 1.3×，其他 1.2×
-        __result = encounter != null && encounter.RoomType == RoomType.Boss ? 1.3m : 1.2m;
-        return false; // skip 原方法
+            // act4/5 沿用 act3 的系数：boss 1.3×，其他 1.2×
+            __result = encounter != null && encounter.RoomType == RoomType.Boss ? 1.3m : 1.2m;
+            return false; // skip 原方法
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"MultiplayerScalingForCustomActsPatch failed: {ex}");
+            // 异常时设个安全的默认值并跳过原方法（避免 base game throw）
+            __result = 1.0m;
+            return false;
+        }
     }
 }
