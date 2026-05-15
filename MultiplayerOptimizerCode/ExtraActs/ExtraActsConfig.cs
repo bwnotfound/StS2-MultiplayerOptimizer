@@ -150,6 +150,38 @@ internal static class ExtraActsConfig
         };
     }
 
+    // ---------- 全局总倍率 ----------
+
+    /// <summary>
+    /// 全局 HP 倍率（叠加在所有其他 HP 倍率最末尾）。
+    /// 用于快速调整后两层整体难度，不破坏已经平衡好的细节倍率。
+    /// 默认 1.0，act1-3 不适用返回 1.0。
+    /// </summary>
+    public static double GetOverallHpMult(int actIdx)
+    {
+        return actIdx switch
+        {
+            4 => MultiplayerOptimizerConfig.Act4_OverallHpMult,
+            5 => MultiplayerOptimizerConfig.Act5_OverallHpMult,
+            _ => 1.0
+        };
+    }
+
+    /// <summary>
+    /// 全局伤害倍率（叠加在所有其他伤害倍率最末尾）。
+    /// 用于快速调整后两层整体难度，不破坏已经平衡好的细节倍率。
+    /// 默认 1.0，act1-3 不适用返回 1.0。
+    /// </summary>
+    public static double GetOverallDmgMult(int actIdx)
+    {
+        return actIdx switch
+        {
+            4 => MultiplayerOptimizerConfig.Act4_OverallDmgMult,
+            5 => MultiplayerOptimizerConfig.Act5_OverallDmgMult,
+            _ => 1.0
+        };
+    }
+
     // ---------- 来源 act 倍率（普通敌人） ----------
 
     public static double GetSourceNormalEnemyHpMult(int actIdx, int sourceActIdx)

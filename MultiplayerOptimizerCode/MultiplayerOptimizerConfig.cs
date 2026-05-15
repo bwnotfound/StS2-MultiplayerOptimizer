@@ -78,6 +78,31 @@ internal class MultiplayerOptimizerConfig : SimpleModConfig
     [ConfigSlider(0, 1, 0.05)] public static double Act5_BossWeight_Act3 { get; set; } = 0.40;
 
     // ============================================================
+    // 全局总倍率（叠加在所有其他倍率最末尾，用于快速调整后两层整体难度）
+    // ============================================================
+    //
+    // 设计意图：当来源 act 倍率 + 普通/boss 倍率都已经平衡好，但想整体上调或下调后两层
+    // 难度时，避免逐个调所有数值。直接改这两个就能对 act4/5 全局调难。
+    //
+    // 放在所有池权重之后、所有具体倍率之前——既符合"先池子后倍率"的阅读顺序，又让用户
+    // 调整整体难度时不用翻到最底下。
+    //
+    // 默认 1.0 = 不影响。所有 HP / Dmg 计算最末尾乘上这两个值。
+    // 范围给 0.1-5.0 足够覆盖"减弱到 10%"到"增强到 5 倍"的极端情况。
+
+    [ConfigSection("Act4_OverallMultipliers")]
+    [ConfigSlider(0.1, 5.0, 0.05)]
+    public static double Act4_OverallHpMult { get; set; } = 1.0;
+
+    [ConfigSlider(0.1, 5.0, 0.05)] public static double Act4_OverallDmgMult { get; set; } = 1.0;
+
+    [ConfigSection("Act5_OverallMultipliers")]
+    [ConfigSlider(0.1, 5.0, 0.05)]
+    public static double Act5_OverallHpMult { get; set; } = 1.0;
+
+    [ConfigSlider(0.1, 5.0, 0.05)] public static double Act5_OverallDmgMult { get; set; } = 1.0;
+
+    // ============================================================
     // 全局倍率（普通敌人 = 起始 → 结束 按层内进度线性插值；boss = 单值）
     // ============================================================
 

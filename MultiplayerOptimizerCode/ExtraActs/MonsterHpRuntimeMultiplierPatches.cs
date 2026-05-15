@@ -111,10 +111,7 @@ internal static class MonsterRuntimeHpHelper
     public static bool IsNestedSuppressed => _nestedSuppressCount > 0;
 
     /// <summary>外层 patch 进入时调，告诉嵌套调用"不要再缩放"。</summary>
-    public static void EnterNestedSuppression()
-    {
-        _nestedSuppressCount++;
-    }
+    public static void EnterNestedSuppression() => _nestedSuppressCount++;
 
     /// <summary>外层 patch 退出时调，配对 <see cref="EnterNestedSuppression"/>。</summary>
     public static void ExitNestedSuppression()
@@ -154,7 +151,7 @@ internal static class MonsterRuntimeHpHelper
         // SetMaxAndCurrentHp(OriginalHp) 这种 reset 调用传的是已加倍值，不能再加倍
         if (creature.ShowsInfiniteHp) return false;
 
-        var mult = GetHpMult(creature);
+        double mult = GetHpMult(creature);
         if (Math.Abs(mult - 1.0) < 1e-6) return false;
 
         scaled = originalAmount * (decimal)mult;
@@ -208,6 +205,45 @@ public static class CreatureAfterAddedToRoomSuppressPatch
         catch (Exception ex)
         {
             MainFile.Logger.Error($"CreatureAfterAddedToRoomSuppressPatch.Postfix failed: {ex}");
+        }
+    }
+}
+
+/// <summary>
+/// 双重保险——同时 patch <see cref="MegaCrit.Sts2.Core.Combat.CombatManager.AfterCreatureAdded"/>。
+///
+/// 为什么：base game 既有 <c>Creature.AfterAddedToRoom</c>（async Task instance method），又有
+/// <c>CombatManager.AfterCreatureAdded</c>（async Task instance method 包装它）。两者都是
+/// async method，Harmony 对 async method 的 patch 在某些罕见情况下可能没有生效（编译器/JIT
+/// 因素 / 其他 mod 的 transpiler 影响），所以两层都 patch 增加鲁棒性。
+///
+/// 计数器是嵌套的——多套一层抑制无副作用：内层 patch 进 +1 后是 2，外层 +1 后是 1，相互独立的
+/// EnterNestedSuppression / ExitNestedSuppression 配对让 counter 永远不会负数 / 残留。
+/// </summary>
+[HarmonyPatch(typeof(MegaCrit.Sts2.Core.Combat.CombatManager),
+    nameof(MegaCrit.Sts2.Core.Combat.CombatManager.AfterCreatureAdded))]
+public static class CombatManagerAfterCreatureAddedSuppressPatch
+{
+    [HarmonyPriority(Priority.High)]
+    [HarmonyPrefix]
+    public static void Prefix()
+    {
+        if (!PatchScope.IsEnabled) return;
+        MonsterRuntimeHpHelper.EnterNestedSuppression();
+    }
+
+    [HarmonyPriority(Priority.Low)]
+    [HarmonyPostfix]
+    public static void Postfix()
+    {
+        if (!PatchScope.IsEnabled) return;
+        try
+        {
+            MonsterRuntimeHpHelper.ExitNestedSuppression();
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"CombatManagerAfterCreatureAddedSuppressPatch.Postfix failed: {ex}");
         }
     }
 }

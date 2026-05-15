@@ -120,7 +120,7 @@ internal static class DifficultyMultiplierContext
         else if (state.Act is Act5Model) actIdx = 5;
         else return (1.0, 1.0);
 
-        var isBossNode = IsAtFinalBossNode(state);
+        bool isBossNode = IsAtFinalBossNode(state);
 
         double globalHp, globalDmg;
         if (isBossNode)
@@ -130,7 +130,7 @@ internal static class DifficultyMultiplierContext
         }
         else
         {
-            var progress = GetActProgress(state);
+            double progress = GetActProgress(state);
             globalHp = ExtraActsConfig.GetNormalEnemyHpMult(actIdx).Lerp(progress);
             globalDmg = ExtraActsConfig.GetNormalEnemyDmgMult(actIdx).Lerp(progress);
         }
@@ -151,7 +151,12 @@ internal static class DifficultyMultiplierContext
             }
         }
 
-        return (globalHp * srcHp, globalDmg * srcDmg);
+        // 最末尾叠加全局总倍率——用户用来快速调整后两层整体难度，不破坏已平衡好的细节倍率。
+        // 默认都是 1.0，不影响行为。
+        double overallHp = ExtraActsConfig.GetOverallHpMult(actIdx);
+        double overallDmg = ExtraActsConfig.GetOverallDmgMult(actIdx);
+
+        return (globalHp * srcHp * overallHp, globalDmg * srcDmg * overallDmg);
     }
 
     private static bool IsAtFinalBossNode(IRunState state)
@@ -162,8 +167,8 @@ internal static class DifficultyMultiplierContext
 
     private static double GetActProgress(IRunState state)
     {
-        var actFloor = state.ActFloor;
-        var totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
+        int actFloor = state.ActFloor;
+        int totalRooms = state.Act.GetNumberOfRooms(state.Players.Count > 1);
         if (totalRooms <= 0) return 0;
         return Math.Clamp((double)actFloor / totalRooms, 0.0, 1.0);
     }
@@ -200,8 +205,8 @@ internal static class DifficultyMultiplierContext
 /// ## 早返优化
 /// 整个 act 不是 4/5 时立即早返不遍历，零开销。
 /// </summary>
-[HarmonyPatch(typeof(CombatManager),
-    nameof(CombatManager.SetUpCombat))]
+[HarmonyPatch(typeof(MegaCrit.Sts2.Core.Combat.CombatManager),
+    nameof(MegaCrit.Sts2.Core.Combat.CombatManager.SetUpCombat))]
 public static class MonsterHpMultiplierPatch
 {
     [HarmonyPriority(Priority.Low)]
@@ -225,7 +230,7 @@ public static class MonsterHpMultiplierPatch
 
             if (Math.Abs(hpMult - 1.0) < 1e-6) return;
 
-            var mult = (decimal)hpMult;
+            decimal mult = (decimal)hpMult;
 
             foreach (var creature in state.Creatures)
             {
@@ -234,7 +239,7 @@ public static class MonsterHpMultiplierPatch
                 if (creature.Monster == null) continue;
                 if (creature.ShowsInfiniteHp) continue; // 无敌阶段不动
 
-                var scaled = (decimal)creature.MaxHp * mult;
+                decimal scaled = (decimal)creature.MaxHp * mult;
                 if (scaled > MonsterRuntimeHpHelper.HpAmountCeiling) scaled = MonsterRuntimeHpHelper.HpAmountCeiling;
                 if (scaled < 1m) scaled = 1m;
 
@@ -291,5 +296,81 @@ public static class MonsterDamageMultiplierPatch
         {
             MainFile.Logger.Error($"MonsterDamageMultiplierPatch failed: {ex}");
         }
+    }
+}
+
+/// <summary>
+/// 战斗中召唤怪物的 HP 倍率：patch <see cref="MegaCrit.Sts2.Core.Commands.CreatureCmd"/>.Add(Creature)
+/// 的 prefix。
+///
+/// ## 为什么需要这个 patch
+///
+/// 战斗开始时的怪物通过 <see cref="MegaCrit.Sts2.Core.Combat.CombatManager.SetUpCombat"/> postfix
+/// （<see cref="MonsterHpMultiplierPatch"/>）批量加倍。
+///
+/// 但战斗<b>过程中</b>召唤的怪物（如 SicEmPower、MinionPower、SummonNextTurnPower 等触发的）走
+/// 另一条路径：<c>CreatureCmd.Add&lt;T&gt;</c> → 内部调 <c>CombatState.CreateCreature</c>（spawn）→
+/// 调 <c>CreatureCmd.Add(Creature)</c>（底层入口）→ 调 <c>AfterCreatureAdded</c>。
+///
+/// 这条路径<b>不经过</b> SetUpCombat，所以战斗中召唤的怪物 HP <b>不会被加倍</b>。
+///
+/// ## Hook 时机
+///
+/// 选择 <c>CreatureCmd.Add(Creature)</c> 的 prefix：
+///   - 这是<b>战斗中召唤</b>的明确入口——base game 实现里有 <c>if (!IsInProgress) throw</c>
+///     保证只在战斗中调用
+///   - CreateCreature 已经完成（SetUniqueMonsterHpValue 已经基于原始 base 范围跑完——战斗中
+///     召唤通常一个怪物，uniqueness 失败也不会触发问题）
+///   - AfterCreatureAdded（含 AfterAddedToRoom）还没跑——如果新怪物在 AfterAddedToRoom 内调
+///     SetMaxAndCurrentHp，会被 <c>CreatureAfterAddedToRoomSuppressPatch</c> 嵌套抑制，
+///     不会双重缩放
+///
+/// 用 prefix 而不是 postfix：prefix 在 stub 入口同步触发，加倍发生在 AfterCreatureAdded 之前。
+/// 这样跟战斗开始时的语义一致（spawn 完立即加倍 → 然后 AfterAddedToRoom）。
+///
+/// ## ShowsInfiniteHp 早返
+/// 召唤出来如果立即调 SetMaxAndCurrentHp(999...) 进入无敌阶段（Doormaker/WaterfallGiant），
+/// 那 spawn-time MaxHp 不该被我们加倍——保留 999... 让 SetMaxAndCurrentHp prefix 自己处理
+/// （ShowsInfiniteHp=true 早返）。
+///
+/// 但 ShowsInfiniteHp 在 spawn 时通常是 false（设 true 是在 AfterAddedToRoom 内）。所以
+/// prefix 跑时一般 ShowsInfiniteHp=false，正常加倍。
+/// </summary>
+[HarmonyPatch(typeof(MegaCrit.Sts2.Core.Commands.CreatureCmd), nameof(MegaCrit.Sts2.Core.Commands.CreatureCmd.Add),
+    new[] { typeof(Creature) })]
+public static class CreatureAddSummonHpMultiplierPatch
+{
+    [HarmonyPriority(Priority.Low)]
+    [HarmonyPrefix]
+    public static void Prefix(Creature creature)
+    {
+        if (!PatchScope.IsEnabled) return;
+        if (creature == null) return;
+        if (creature.Side != CombatSide.Enemy) return;
+        if (creature.Monster == null) return;
+        if (creature.ShowsInfiniteHp) return; // 无敌阶段 - 让原方法保持
+
+        PatchScope.Run(nameof(CreatureAddSummonHpMultiplierPatch), () =>
+        {
+            var combatState = creature.CombatState;
+            if (combatState?.RunState == null) return;
+
+            // 必须在 act4/5 才介入——其他 act 由 base game 控制
+            var act = combatState.RunState.Act;
+            if (act is not Act4Model && act is not Act5Model) return;
+
+            var (hpMult, _) = DifficultyMultiplierContext.GetCurrentMultipliers(
+                combatState.RunState, combatState.Encounter);
+
+            if (Math.Abs(hpMult - 1.0) < 1e-6) return;
+
+            decimal scaled = (decimal)creature.MaxHp * (decimal)hpMult;
+            if (scaled > MonsterRuntimeHpHelper.HpAmountCeiling) scaled = MonsterRuntimeHpHelper.HpAmountCeiling;
+            if (scaled < 1m) scaled = 1m;
+
+            // 直接调 internal method，绕过 CreatureCmd.SetMaxHp 避免触发我们自己的 prefix（双重 scale）
+            creature.SetMaxHpInternal(scaled);
+            creature.SetCurrentHpInternal(scaled);
+        });
     }
 }
