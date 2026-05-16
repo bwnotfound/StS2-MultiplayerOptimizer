@@ -2,8 +2,8 @@
   "id": "MultiplayerOptimizer",
   "name": "MultiplayerOptimizer",
   "author": "bwnotfound",
-  "description": "Some awesome function for mulityplay mode",
-  "version": "0.4.0",
+  "description": "A mod for Slay the Spire 2 that adds extra acts and difficulty scaling for multiplayer runs.",
+  "version": "0.5.0",
   "has_pck": true,
   "has_dll": true,
   "dependencies": [

@@ -1,7 +1,7 @@
 ﻿using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes.Screens.Settings;
 
-namespace MultiplayerOptimizer.MultiplayerOptimizerCode.SettingsInjection;
+namespace MultiplayerOptimizer.MultiplayerOptimizerCode;
 
 // ===================================================================================================
 // 设计背景：
@@ -22,9 +22,9 @@ namespace MultiplayerOptimizer.MultiplayerOptimizerCode.SettingsInjection;
 // ===================================================================================================
 
 /// <summary>
-/// Patch NUploadDataTickbox.OnTick 的 prefix。
-/// 如果点击的是我们注入的 row 里的 tickbox，按 row 类型改我们 mod 的 config，return false 阻止
-/// 原方法（避免污染 PrefsSave.UploadData）。
+///     Patch NUploadDataTickbox.OnTick 的 prefix。
+///     如果点击的是我们注入的 row 里的 tickbox，按 row 类型改我们 mod 的 config，return false 阻止
+///     原方法（避免污染 PrefsSave.UploadData）。
 /// </summary>
 [HarmonyPatch(typeof(NUploadDataTickbox), "OnTick")]
 internal static class InjectedTickboxOnTickPatch
@@ -52,7 +52,7 @@ internal static class InjectedTickboxOnTickPatch
 }
 
 /// <summary>
-/// Patch NUploadDataTickbox.OnUntick 的 prefix。同 OnTick 镜像逻辑。
+///     Patch NUploadDataTickbox.OnUntick 的 prefix。同 OnTick 镜像逻辑。
 /// </summary>
 [HarmonyPatch(typeof(NUploadDataTickbox), "OnUntick")]
 internal static class InjectedTickboxOnUntickPatch
@@ -79,14 +79,12 @@ internal static class InjectedTickboxOnUntickPatch
 }
 
 /// <summary>
-/// Patch NUploadDataTickbox.SetFromSettings 的 prefix。
-///
-/// 这个方法在两个时机被调：
-///   1. _Ready 时（base game 初始化）—— duplicate 出来的 row 也会 _Ready
-///   2. 我们 SettingsUiInjectionPatch 主动 RefreshInjectedTickboxes() 时
-///
-/// 原 base game 逻辑：<c>IsTicked = SaveManager.Instance.PrefsSave.UploadData</c>。
-/// 我们要让注入的 row 显示我们 config 的当前值而不是 UploadData——重定向 IsTicked 来源。
+///     Patch NUploadDataTickbox.SetFromSettings 的 prefix。
+///     这个方法在两个时机被调：
+///     1. _Ready 时（base game 初始化）—— duplicate 出来的 row 也会 _Ready
+///     2. 我们 SettingsUiInjectionPatch 主动 RefreshInjectedTickboxes() 时
+///     原 base game 逻辑：<c>IsTicked = SaveManager.Instance.PrefsSave.UploadData</c>。
+///     我们要让注入的 row 显示我们 config 的当前值而不是 UploadData——重定向 IsTicked 来源。
 /// </summary>
 [HarmonyPatch(typeof(NUploadDataTickbox), "SetFromSettings")]
 internal static class InjectedTickboxSetFromSettingsPatch
