@@ -76,6 +76,19 @@ public static class CustomActEncounterReplacementPatch
                 MainFile.Logger.Info(
                     $"Act4: refilled {targetCount} elite encounters " +
                     $"(weights {w.Act1}/{w.Act2}/{w.Act3}, distinct pool size {totalPoolSize})");
+
+                // 相邻去重：让 act4 玩家走的连续 elite 战斗不重复。act4 只消费 eliteEncounters，
+                // 单 list dedup 即可（无 normalEncounters 路径要考虑）。
+                if (MultiplayerOptimizerConfig.AvoidAdjacentEncounterDuplicate)
+                {
+                    var dups = EncounterDeduplicator.DeduplicateAdjacent(rooms.eliteEncounters);
+                    if (dups == 0)
+                        MainFile.Logger.Info("Act4: elite list dedup OK (no adjacent duplicates)");
+                    else
+                        MainFile.Logger.Warn(
+                            $"Act4: elite list dedup partial — {dups} adjacent duplicate(s) remain " +
+                            "(pool size too small relative to list length)");
+                }
             }
             else // Act5Model
             {
@@ -101,6 +114,22 @@ public static class CustomActEncounterReplacementPatch
                 MainFile.Logger.Info(
                     $"Act5: replaced {normalCount} normal + {eliteCount} elite with boss content " +
                     $"(weights {w.Act1}/{w.Act2}/{w.Act3}, distinct pool size {totalPoolSize})");
+
+                // 相邻去重：act5 中部节点会混合消费 normal+elite 两个 list（取决于节点类型），
+                // 两个 list 都用同一个 boss 池填充，cross-list 重复风险高。
+                // 合并 → 整体 dedup → 拆回，最大化 unique pattern。
+                if (MultiplayerOptimizerConfig.AvoidAdjacentEncounterDuplicate)
+                {
+                    var dups = EncounterDeduplicator.DeduplicateMerged(
+                        rooms.normalEncounters, rooms.eliteEncounters);
+                    if (dups == 0)
+                        MainFile.Logger.Info(
+                            "Act5: normal+elite merged dedup OK (no adjacent duplicates in combined sequence)");
+                    else
+                        MainFile.Logger.Warn(
+                            $"Act5: merged dedup partial — {dups} adjacent duplicate(s) in combined sequence " +
+                            "(pool size too small; cross-list path duplicates may also occur)");
+                }
             }
         });
     }

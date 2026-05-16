@@ -1,10 +1,28 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Reflection;
 using BaseLib.Abstracts;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Multiplayer.Transport;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
+
+/// <summary>
+/// 标记 <see cref="MultiplayerOptimizerConfig"/> 的 property 不参与 ConfigSync——
+/// 即 host 不会广播给 client，client 也不会被 host 的值覆盖，各玩家保持各自的本地值。
+///
+/// 适用场景：<b>纯本地客户端表现设置，跟游戏 state 演进无关</b>，玩家之间不一致也不会破坏游戏正确性。
+/// 当前用例：<c>EnableSpeedMultiplier</c> / <c>SpeedMultiplier</c>——通过 <c>Engine.TimeScale</c>
+/// 控制本地引擎时间，每个玩家看到的动画速度不同但事件层面完全同步（checksum 触发点都是回合事件，
+/// 网络消息走 wall-clock 时间）。
+///
+/// <b>不要</b>标记影响游戏 state 的字段（HP/Dmg 倍率、boss 池权重等），否则 host/client 数值不一致
+/// 会触发 ChecksumTracker desync 检测。
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+public class ConfigSyncIgnoreAttribute : Attribute
+{
+}
 
 /// <summary>
 /// 把 host 的 MultiplayerOptimizerConfig 字段值打包广播给所有 client。
@@ -53,6 +71,8 @@ public sealed class ConfigSyncMessage : ICustomMessage
         foreach (var prop in props)
         {
             if (!prop.CanRead || !prop.CanWrite) continue;
+            // 跳过明确标记不同步的字段（如本地 SpeedMultiplier——纯客户端表现，各玩家独立）
+            if (prop.IsDefined(typeof(ConfigSyncIgnoreAttribute), inherit: false)) continue;
             var value = prop.GetValue(null);
             if (value is double d) msg.Doubles[prop.Name] = d;
             else if (value is bool b) msg.Bools[prop.Name] = b;

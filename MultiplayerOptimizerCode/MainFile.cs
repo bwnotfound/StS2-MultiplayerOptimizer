@@ -81,5 +81,22 @@ public partial class MainFile : Node
         {
             Logger.Error($"Harmony PatchAll failed: {ex}");
         }
+
+        // 注册全局速度控制器：每帧把 SpeedMultiplier config 同步到 Engine.TimeScale。
+        //
+        // 早期版本（v0.4.4 initial）继承 Node 用 _Process，因为 Godot Source Generator 给
+        // partial class : Node 生成的 InvokeGodotClassMethod 跟 MonoMod 不兼容导致每帧抛
+        // ArgumentException。改成 static class + SceneTree.ProcessFrame signal 完全绕开
+        // Source Generator。
+        //
+        // 全段 try/catch：速度控制器即使失败也不该让整个 mod 挂掉。
+        try
+        {
+            SpeedMultiplierController.Initialize();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"SpeedMultiplierController.Initialize failed: {ex}");
+        }
     }
 }

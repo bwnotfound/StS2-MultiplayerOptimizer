@@ -1,4 +1,5 @@
 ﻿using BaseLib.Config;
+using MultiplayerOptimizer.MultiplayerOptimizerCode.ExtraActs;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode;
 
@@ -88,19 +89,19 @@ internal class MultiplayerOptimizerConfig : SimpleModConfig
     // 调整整体难度时不用翻到最底下。
     //
     // 默认 1.0 = 不影响。所有 HP / Dmg 计算最末尾乘上这两个值。
-    // 范围给 0.1-5.0 足够覆盖"减弱到 10%"到"增强到 5 倍"的极端情况。
+    // 范围给 0.1-100 足够覆盖"减弱到 10%"到"增强到 100 倍"的极端情况。
 
     [ConfigSection("Act4_OverallMultipliers")]
-    [ConfigSlider(0.1, 5.0, 0.05)]
+    [ConfigSlider(0.1, 100, 0.05)]
     public static double Act4_OverallHpMult { get; set; } = 1.0;
 
-    [ConfigSlider(0.1, 5.0, 0.05)] public static double Act4_OverallDmgMult { get; set; } = 1.0;
+    [ConfigSlider(0.1, 100, 0.05)] public static double Act4_OverallDmgMult { get; set; } = 1.0;
 
     [ConfigSection("Act5_OverallMultipliers")]
-    [ConfigSlider(0.1, 5.0, 0.05)]
+    [ConfigSlider(0.1, 100, 0.05)]
     public static double Act5_OverallHpMult { get; set; } = 1.0;
 
-    [ConfigSlider(0.1, 5.0, 0.05)] public static double Act5_OverallDmgMult { get; set; } = 1.0;
+    [ConfigSlider(0.1, 100, 0.05)] public static double Act5_OverallDmgMult { get; set; } = 1.0;
 
     // ============================================================
     // 全局倍率（普通敌人 = 起始 → 结束 按层内进度线性插值；boss = 单值）
@@ -215,4 +216,49 @@ internal class MultiplayerOptimizerConfig : SimpleModConfig
     ///   3. Act5 顶部最终 boss（Act5Model.GenerateAllEncounters 复用的 Glory.AllEncounters）
     /// </summary>
     public static bool ExcludeDoormakerFromBossPool { get; set; } = false;
+
+    /// <summary>
+    /// 是否让 act4/5 玩家走的相邻战斗节点 encounter 不重复（避免连续打同样的怪组合）。
+    ///
+    /// 实现：CustomActEncounterReplacementPatch fill 完两个 list 之后用 EncounterDeduplicator
+    /// 贪心重排（"任务调度: 重排相邻字符"算法）。
+    ///   - Act4：单 list dedup（只消费 eliteEncounters，无 normalEncounters 路径）
+    ///   - Act5：合并 normal+elite → 整体 dedup → 拆回（两个 list 都填 boss 池，cross-list 风险高）
+    ///
+    /// 不可避免的情况：池子小（用户把 act1/2 权重设为 0 只留 act3 等）时某个 encounter 频率
+    /// 超过 (N+1)/2，数学上无法完全 dedup——log warn 提示但不影响游戏。
+    /// </summary>
+    public static bool AvoidAdjacentEncounterDuplicate { get; set; } = true;
+
+    // ============================================================
+    // 全局游戏速度（叠加在 base game FastMode 之上）
+    // ============================================================
+    //
+    // 通过 Godot Engine.TimeScale 实现整个游戏引擎层面的统一加速——影响所有 timer / tween /
+    // animation / spine 动画 / process delta。不影响真实时间（系统时间）、UI 输入响应、FMOD 音频。
+    //
+    // 跟 base game FastMode（None/Normal/Fast/Instant）独立叠加：例如 FastMode=Fast 让某段
+    // 动画原本 0.2s，再 ×2 倍率后实际 0.1s。两者自然乘起来，无需协调。
+    //
+    // ## 不参与联机同步（[ConfigSyncIgnore]）
+    //
+    // 这两个字段标记为 [ConfigSyncIgnore]——host 不广播、client 不被覆盖，每个玩家独立设置自己
+    // 看到的速度。理由：Engine.TimeScale 是纯客户端表现层（影响本地动画/timer 速度），跟游戏
+    // state 演进无关：
+    //   - ChecksumTracker 在回合事件触发（"After player turn start" 等），不依赖时间
+    //   - 网络消息全部走 Time.GetTicksMsec()（wall-clock），不受 TimeScale 影响
+    //   - PeerInputSynchronizer / HeartbeatTracker 也走 wall-clock
+    //
+    // 各玩家本地看到的速度不同 = 各自看到动画跑得快/慢，但事件最终都触发、state 同步。
+    //
+    // 应用机制见 SpeedMultiplierController.OnProcessFrame：每帧检查 config 跟 Engine.TimeScale
+    // 是否一致，不一致就更新。因此本地拖 slider 立即生效（&lt; 16ms 内下一帧应用）。
+
+    [ConfigSyncIgnore]
+    [ConfigSection("Speed")]
+    public static bool EnableSpeedMultiplier { get; set; } = true;
+
+    [ConfigSyncIgnore]
+    [ConfigSlider(0.5, 10.0, 0.1)]
+    public static double SpeedMultiplier { get; set; } = 2.0;
 }

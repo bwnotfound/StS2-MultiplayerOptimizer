@@ -74,5 +74,11 @@
   "MULTIPLAYEROPTIMIZER-BEHAVIOR_TOGGLES.title": "Behavior Toggles",
   "MULTIPLAYEROPTIMIZER-ACT5_SHOW_DISGUISED_BOSS_WARNING.title": "Act 5 disguised boss warning",
   "MULTIPLAYEROPTIMIZER-ACT5_AVOID_FINAL_BOSS_EQUAL_PENULTIMATE.title": "Final boss ≠ penultimate boss",
-  "MULTIPLAYEROPTIMIZER-EXCLUDE_DOORMAKER_FROM_BOSS_POOL.title": "Exclude Doormaker from Act 4/5 boss pools"
+  "MULTIPLAYEROPTIMIZER-EXCLUDE_DOORMAKER_FROM_BOSS_POOL.title": "Exclude Doormaker from Act 4/5 boss pools",
+  "MULTIPLAYEROPTIMIZER-AVOID_ADJACENT_ENCOUNTER_DUPLICATE.title": "Avoid adjacent duplicate encounters in Act 4/5",
+  "MULTIPLAYEROPTIMIZER-SPEED.title": "Game Speed",
+  "MULTIPLAYEROPTIMIZER-ENABLE_SPEED_MULTIPLIER.title": "Enable speed multiplier",
+  "MULTIPLAYEROPTIMIZER-SPEED_MULTIPLIER.title": "Speed multiplier (stacks with FastMode)",
+  "MULTIPLAYEROPTIMIZER-ENABLE_EXTRA_SPEED.title": "Enable Extra Speed Multiplier",
+  "MULTIPLAYEROPTIMIZER-EXTRA_SPEED_MULTIPLIER.title": "Extra Speed Multiplier"
 }
