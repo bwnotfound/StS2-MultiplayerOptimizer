@@ -1,39 +1,52 @@
-﻿using Godot;
+﻿using System;
+using Godot;
+using Godot.Collections;
 using HarmonyLib;
 using MegaCrit.Sts2.addons.mega_text;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.Settings;
-using Range = Godot.Range;
 
 namespace MultiplayerOptimizer.MultiplayerOptimizerCode;
 
 /// <summary>
-///     把 mod 的"启用额外加速"和"额外加速倍率"两个设置注入到官方游戏设置界面，紧贴 FastMode row 之后。
-///     ## 实现策略（参考 SteamRandomMatch mod）
-///     base game 没暴露任何 mod-API 注入 settings UI，但 settings 界面是 Godot scene tree——
-///     我们可以在 <c>NSettingsScreen._Ready</c> postfix 时 duplicate 已有的 row 作为模板：
-///     - tickbox 模板：<c>UploadGameplayData</c>（NUploadDataTickbox，最简单的 tickbox row）
-///     - slider 模板：<c>BgmVolume</c>（NBgmVolumeSlider，跨面板复制）
-///     复制 row → 改 Name（独特标识，用于后续行为路由）→ 改 label 文本 → 重置控件值/handler。
-///     ## 控件行为重定向
-///     duplicate 后的 row 仍是 NUploadDataTickbox / NBgmVolumeSlider 实例，原本会改 base game
-///     PrefsSave 字段。两种策略：
-///     - <b>Tickbox</b>：OnTick/OnUntick/SetFromSettings 是 C# virtual override，无法
+/// 把 mod 的"启用额外加速"和"额外加速倍率"两个设置注入到官方游戏设置界面，紧贴 FastMode row 之后。
+///
+/// ## 实现策略（参考 SteamRandomMatch mod）
+///
+/// base game 没暴露任何 mod-API 注入 settings UI，但 settings 界面是 Godot scene tree——
+/// 我们可以在 <c>NSettingsScreen._Ready</c> postfix 时 duplicate 已有的 row 作为模板：
+///   - tickbox 模板：<c>UploadGameplayData</c>（NUploadDataTickbox，最简单的 tickbox row）
+///   - slider 模板：<c>BgmVolume</c>（NBgmVolumeSlider，跨面板复制）
+///
+/// 复制 row → 改 Name（独特标识，用于后续行为路由）→ 改 label 文本 → 重置控件值/handler。
+///
+/// ## 控件行为重定向
+///
+/// duplicate 后的 row 仍是 NUploadDataTickbox / NBgmVolumeSlider 实例，原本会改 base game
+/// PrefsSave 字段。两种策略：
+///   - <b>Tickbox</b>：OnTick/OnUntick/SetFromSettings 是 C# virtual override，无法
 ///     disconnect。改用 Harmony patch prefix，按 row Name 路由——见 InjectedTickboxRouterPatch。
-///     - <b>Slider</b>：ValueChanged 是 Godot signal，可以 Disconnect + Connect 新 handler，
+///   - <b>Slider</b>：ValueChanged 是 Godot signal，可以 Disconnect + Connect 新 handler，
 ///     完全本地处理。
-///     ## 跟 mod 配置界面的关系
-///     mod 配置（BaseLib ConfigUI 自动生成的）里仍然有 EnableSpeedMultiplier / SpeedMultiplier
-///     控件——它们和官方 settings 里注入的控件共同写同一个 static 字段。
-///     SpeedMultiplierController._Process 每帧 poll config 同步到 Engine.TimeScale，所以任一处改
-///     都立即生效。两处显示不会自动同步（一个改了另一个 UI 看到的还是旧值），但**功能上完全等价**。
-///     ## Idempotency
-///     _Ready 可能被调多次（场景刷新等）。每次注入前检查新 row 是否已存在（用 Name 查），存在则跳过。
-///     Slider 用 Meta flag 防止 handler 重复 connect。
-///     ## 失败处理
-///     整段包 try/catch：注入失败只是 UI 没出现，mod 其他功能（patches、speed controller）继续工作。
-///     base game scene 升级改了节点名字时会失效——但只是降级到"用户从 mod 配置改"的体验，不破坏游戏。
+///
+/// ## 跟 mod 配置界面的关系
+///
+/// mod 配置（BaseLib ConfigUI 自动生成的）里仍然有 EnableSpeedMultiplier / SpeedMultiplier
+/// 控件——它们和官方 settings 里注入的控件共同写同一个 static 字段。
+/// SpeedMultiplierController._Process 每帧 poll config 同步到 Engine.TimeScale，所以任一处改
+/// 都立即生效。两处显示不会自动同步（一个改了另一个 UI 看到的还是旧值），但**功能上完全等价**。
+///
+/// ## Idempotency
+///
+/// _Ready 可能被调多次（场景刷新等）。每次注入前检查新 row 是否已存在（用 Name 查），存在则跳过。
+/// Slider 用 Meta flag 防止 handler 重复 connect。
+///
+/// ## 失败处理
+///
+/// 整段包 try/catch：注入失败只是 UI 没出现，mod 其他功能（patches、speed controller）继续工作。
+/// base game scene 升级改了节点名字时会失效——但只是降级到"用户从 mod 配置改"的体验，不破坏游戏。
 /// </summary>
 [HarmonyPatch(typeof(NSettingsScreen), "_Ready")]
 internal static class SettingsUiInjectionPatch
@@ -46,8 +59,8 @@ internal static class SettingsUiInjectionPatch
     private const string SliderHookedMetaKey = "mo_extra_speed_slider_hooked";
 
     /// <summary>
-    ///     SpeedMultiplier 范围 0.5-10，UI slider 用 5-100 整数（×10 表示）便于 step 控制。
-    ///     显示时 ÷10 还原成 "X.Yx" 字符串。
+    /// SpeedMultiplier 范围 0.5-10，UI slider 用 5-100 整数（×10 表示）便于 step 控制。
+    /// 显示时 ÷10 还原成 "X.Yx" 字符串。
     /// </summary>
     private const double SliderMinInternal = 5.0; // = 0.5x
 
@@ -70,7 +83,15 @@ internal static class SettingsUiInjectionPatch
         }
     }
 
-    private static void InjectRows(NSettingsScreen screen)
+    /// <summary>
+    /// 注入或刷新 row。两个时机被调用：
+    ///   - <see cref="Postfix(NSettingsScreen)"/>：NSettingsScreen._Ready 首次构造时（注入新 row）
+    ///   - <see cref="SettingsUiOnSubmenuShownRefreshPatch.Postfix(NSettingsScreen)"/>：
+    ///     每次切回官方设置界面时（刷新已注入的 row，让模组配置 UI 的改动反映过来）
+    ///
+    /// internal 而非 private——让 sibling patch class 能调用。
+    /// </summary>
+    internal static void InjectRows(NSettingsScreen screen)
     {
         // 1. 拿 GeneralSettings 面板的 Content 容器（VBoxContainer）
         var generalPanel = screen.GetNodeOrNull<NSettingsPanel>("%GeneralSettings");
@@ -98,9 +119,13 @@ internal static class SettingsUiInjectionPatch
         {
             var tickboxTemplate = content.GetNodeOrNull<Control>(TickboxTemplateName);
             if (tickboxTemplate == null)
+            {
                 MainFile.Logger.Warn($"Settings injection: {TickboxTemplateName} row not found in GeneralSettings");
+            }
             else
+            {
                 InjectTickboxRow(content, tickboxTemplate, insertAfterIndex + 1);
+            }
         }
         else
         {
@@ -141,7 +166,7 @@ internal static class SettingsUiInjectionPatch
     {
         // Duplicate(15) = DUPLICATE_GROUPS | DUPLICATE_SIGNALS | DUPLICATE_SCRIPTS | DUPLICATE_USE_INSTANTIATION
         // 完全复制：节点、脚本、signal 连接、group 标签
-        var newRow = template.Duplicate() as Control;
+        var newRow = template.Duplicate(15) as Control;
         if (newRow == null)
         {
             MainFile.Logger.Warn("Tickbox row duplicate failed");
@@ -155,8 +180,10 @@ internal static class SettingsUiInjectionPatch
         // 改 label 文本（label 本身没 _Ready 依赖，立即设 OK）
         var label = newRow.GetNodeOrNull<MegaRichTextLabel>("Label");
         if (label != null)
+        {
             label.Text = new LocString("settings_ui", "MULTIPLAYEROPTIMIZER-ENABLE_EXTRA_SPEED.title")
                 .GetFormattedText();
+        }
 
         // 内部 NUploadDataTickbox 的 IsTicked 设置依赖 _Ready 里初始化的 _tickedImage/_notTickedImage
         // 字段——必须等 _Ready 之后再 RefreshTickboxesInRow，否则会 NPE。
@@ -167,17 +194,18 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     调 row 内所有 NUploadDataTickbox 的 SetFromSettings()。
-    ///     配合 InjectedTickboxSetFromSettingsPatch 实现把 UI 显示同步到我们 config 当前值。
+    /// 调 row 内所有 NUploadDataTickbox 的 SetFromSettings()。
+    /// 配合 InjectedTickboxSetFromSettingsPatch 实现把 UI 显示同步到我们 config 当前值。
     /// </summary>
     private static void RefreshTickboxesInRow(Node row)
     {
-        var stack = new Stack<Node>();
+        var stack = new System.Collections.Generic.Stack<Node>();
         stack.Push(row);
         while (stack.Count > 0)
         {
             var n = stack.Pop();
             if (n is NUploadDataTickbox tb)
+            {
                 try
                 {
                     tb.SetFromSettings();
@@ -186,6 +214,7 @@ internal static class SettingsUiInjectionPatch
                 {
                     MainFile.Logger.Warn($"SetFromSettings on injected tickbox failed: {ex.Message}");
                 }
+            }
 
             foreach (var c in n.GetChildren()) stack.Push(c);
         }
@@ -197,7 +226,7 @@ internal static class SettingsUiInjectionPatch
 
     private static void InjectSliderRow(VBoxContainer container, Control template, int insertIndex)
     {
-        var newRow = template.Duplicate() as Control;
+        var newRow = template.Duplicate(15) as Control;
         if (newRow == null)
         {
             MainFile.Logger.Warn("Slider row duplicate failed");
@@ -211,8 +240,10 @@ internal static class SettingsUiInjectionPatch
         // 改 label 文本（立即可改，不依赖 _Ready）
         var label = newRow.GetNodeOrNull<MegaRichTextLabel>("Label");
         if (label != null)
+        {
             label.Text = new LocString("settings_ui", "MULTIPLAYEROPTIMIZER-EXTRA_SPEED_MULTIPLIER.title")
                 .GetFormattedText();
+        }
 
         // ⚠️ 关键：slider 行为必须等 NBgmVolumeSlider._Ready 跑完再绑定！
         //
@@ -231,11 +262,12 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     在节点 _Ready 跑完后执行 action。如果 _Ready 已经跑过（IsNodeReady=true），立即执行；
-    ///     否则注册到 Ready signal。
-    ///     用 Connect 而不是 C# event +=：避免 Godot Source Generator 生成 partial class
-    ///     dispatcher（这正是早期 SpeedMultiplierController 撞 MonoMod JIT hook 的根因），
-    ///     虽然这里我们用的是 base game 的类不会触发，但保持习惯。
+    /// 在节点 _Ready 跑完后执行 action。如果 _Ready 已经跑过（IsNodeReady=true），立即执行；
+    /// 否则注册到 Ready signal。
+    ///
+    /// 用 Connect 而不是 C# event +=：避免 Godot Source Generator 生成 partial class
+    /// dispatcher（这正是早期 SpeedMultiplierController 撞 MonoMod JIT hook 的根因），
+    /// 虽然这里我们用的是 base game 的类不会触发，但保持习惯。
     /// </summary>
     private static void RunAfterReady(Node node, Action action)
     {
@@ -274,10 +306,11 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     重置 slider row：把 base game 原 ValueChanged handler（NBgmVolumeSlider.OnValueChanged，
-    ///     会写 audio bus）disconnect 掉；范围改成 our config 的 [0.5, 10] 映射；reconnect 我们自己的
-    ///     handler 写 MultiplayerOptimizerConfig.SpeedMultiplier。
-    ///     用 Meta flag 保证 handler 只绑定一次——即使 NSettingsScreen._Ready 被多次调用。
+    /// 重置 slider row：把 base game 原 ValueChanged handler（NBgmVolumeSlider.OnValueChanged，
+    /// 会写 audio bus）disconnect 掉；范围改成 our config 的 [0.5, 10] 映射；reconnect 我们自己的
+    /// handler 写 MultiplayerOptimizerConfig.SpeedMultiplier。
+    ///
+    /// 用 Meta flag 保证 handler 只绑定一次——即使 NSettingsScreen._Ready 被多次调用。
     /// </summary>
     private static void RefreshSliderRow(Control row)
     {
@@ -309,13 +342,13 @@ internal static class SettingsUiInjectionPatch
         // 第一次进入：disconnect 所有原有 ValueChanged handler + 设范围 + connect 我们的 handler
         if (!slider.HasMeta(SliderHookedMetaKey))
         {
-            var disconnected = DisconnectAllValueChangedHandlers(slider);
+            int disconnected = DisconnectAllValueChangedHandlers(slider);
             MainFile.Logger.Info($"[Slider] Disconnected {disconnected} ValueChanged handlers");
 
             slider.MinValue = SliderMinInternal;
             slider.MaxValue = SliderMaxInternal;
             slider.Step = SliderStepInternal;
-            slider.Connect(Range.SignalName.ValueChanged,
+            slider.Connect(Godot.Range.SignalName.ValueChanged,
                 Callable.From<double>(OnSpeedSliderValueChanged));
             slider.SetMeta(SliderHookedMetaKey, true);
 
@@ -343,23 +376,23 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     Disconnect 一个 slider 上所有 ValueChanged signal handler。返回 disconnect 数量。
-    ///     参考 SteamRandomMatch mod 的做法——遍历 GetSignalConnectionList 拿所有 callable 并断开。
+    /// Disconnect 一个 slider 上所有 ValueChanged signal handler。返回 disconnect 数量。
+    /// 参考 SteamRandomMatch mod 的做法——遍历 GetSignalConnectionList 拿所有 callable 并断开。
     /// </summary>
     private static int DisconnectAllValueChangedHandlers(NSlider slider)
     {
-        var count = 0;
+        int count = 0;
         try
         {
-            var connections = slider.GetSignalConnectionList(Range.SignalName.ValueChanged);
+            var connections = slider.GetSignalConnectionList(Godot.Range.SignalName.ValueChanged);
             MainFile.Logger.Info($"[Slider] GetSignalConnectionList returned {connections.Count} entries");
 
-            foreach (var item in connections)
+            foreach (Dictionary item in connections)
             {
                 // 尝试两种 key 类型：string 和 StringName——Godot 4 中 GetSignalConnectionList
                 // 返回的字典 key 类型可能是 StringName 而不是 string，需要兼容
                 Variant callableVar = default;
-                var found = false;
+                bool found = false;
                 if (item.ContainsKey("callable"))
                 {
                     callableVar = item["callable"];
@@ -374,13 +407,13 @@ internal static class SettingsUiInjectionPatch
                 if (!found)
                 {
                     MainFile.Logger.Warn(
-                        "[Slider] connection entry without 'callable' key. Keys: " +
+                        $"[Slider] connection entry without 'callable' key. Keys: " +
                         string.Join(",", item.Keys));
                     continue;
                 }
 
                 var callable = callableVar.AsCallable();
-                slider.Disconnect(Range.SignalName.ValueChanged, callable);
+                slider.Disconnect(Godot.Range.SignalName.ValueChanged, callable);
                 count++;
             }
         }
@@ -393,9 +426,13 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     Slider ValueChanged callback（注入版）。
-    ///     internal value（5-100）→ SpeedMultiplier（0.5-10）。
-    ///     同时更新 row 内的 SliderValue label 显示 "X.Yx"。
+    /// Slider ValueChanged callback（注入版）。
+    /// internal value（5-100）→ SpeedMultiplier（0.5-10）。
+    /// 同时更新 row 内的 SliderValue label 显示 "X.Yx"。
+    ///
+    /// ## 同步约定（v0.4.6 新增）
+    /// 写完 SpeedMultiplier 后调 InjectedConfigSyncHelper.NotifyConfigChangedAndPersist()，
+    /// 让 BaseLib 配置 UI 同步刷新 + 防抖存盘。详见 InjectedTickboxRouterPatch.cs 顶部注释。
     /// </summary>
     private static void OnSpeedSliderValueChanged(double internalValue)
     {
@@ -405,6 +442,10 @@ internal static class SettingsUiInjectionPatch
             MainFile.Logger.Info(
                 $"[Slider] OnSpeedSliderValueChanged(internal={internalValue}) -> SpeedMultiplier={multiplier}");
             MultiplayerOptimizerConfig.SpeedMultiplier = multiplier;
+
+            // 同步约定：写完 config 字段后必须通知 BaseLib + 防抖存盘
+            // SaveDebounced 内部 1000ms 防抖——拖动时高频调用会合并成一次实际写盘
+            InjectedConfigSyncHelper.NotifyConfigChangedAndPersist();
 
             // 找当前 row 更新显示——通过查找已注入的 row（slider callback 没法直接拿到 row 引用，
             // 用全局 SceneTree 查 GeneralSettings 面板下的 row）
@@ -440,9 +481,13 @@ internal static class SettingsUiInjectionPatch
         // 用递归按名字查找，不依赖具体层级
         var valLabel = FindFirstChildByName<MegaLabel>(row, "SliderValue");
         if (valLabel != null)
+        {
             valLabel.SetTextAutoSize($"{MultiplayerOptimizerConfig.SpeedMultiplier:F1}x");
+        }
         else
+        {
             MainFile.Logger.Warn("[Slider] UpdateSpeedSliderValueLabel: 'SliderValue' MegaLabel not found");
+        }
     }
 
     /// <summary>简单 BFS 递归找节点。settings 界面较小，性能不是问题。</summary>
@@ -459,8 +504,8 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     诊断用：把 node 的整棵子树打到 log，包括类型和路径。
-    ///     用于排查"GetNode 找不到 X 节点"——看实际节点叫什么。
+    /// 诊断用：把 node 的整棵子树打到 log，包括类型和路径。
+    /// 用于排查"GetNode 找不到 X 节点"——看实际节点叫什么。
     /// </summary>
     private static void DumpNodeTree(Node node, string indent, int depth)
     {
@@ -469,7 +514,10 @@ internal static class SettingsUiInjectionPatch
         {
             MainFile.Logger.Info(
                 $"[Slider] {indent}Node: name='{node.Name}', type={node.GetType().Name}");
-            foreach (var c in node.GetChildren()) DumpNodeTree(c, indent + "  ", depth + 1);
+            foreach (var c in node.GetChildren())
+            {
+                DumpNodeTree(c, indent + "  ", depth + 1);
+            }
         }
         catch (Exception ex)
         {
@@ -478,11 +526,11 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     递归查找 root 子树中第一个 T 类型节点。BFS。
+    /// 递归查找 root 子树中第一个 T 类型节点。BFS。
     /// </summary>
     private static T? FindFirstChildOfType<T>(Node root) where T : class
     {
-        var queue = new Queue<Node>();
+        var queue = new System.Collections.Generic.Queue<Node>();
         queue.Enqueue(root);
         while (queue.Count > 0)
         {
@@ -495,12 +543,12 @@ internal static class SettingsUiInjectionPatch
     }
 
     /// <summary>
-    ///     递归按 name 查找 root 子树中第一个名字匹配且类型为 T 的节点。BFS。
-    ///     比 GetNode(path) 更 robust：不依赖具体层级结构，节点被嵌套在 wrapper 容器里也能找到。
+    /// 递归按 name 查找 root 子树中第一个名字匹配且类型为 T 的节点。BFS。
+    /// 比 GetNode(path) 更 robust：不依赖具体层级结构，节点被嵌套在 wrapper 容器里也能找到。
     /// </summary>
     private static T? FindFirstChildByName<T>(Node root, string name) where T : class
     {
-        var queue = new Queue<Node>();
+        var queue = new System.Collections.Generic.Queue<Node>();
         queue.Enqueue(root);
         while (queue.Count > 0)
         {
@@ -510,5 +558,51 @@ internal static class SettingsUiInjectionPatch
         }
 
         return null;
+    }
+}
+
+/// <summary>
+/// 配合 <see cref="SettingsUiInjectionPatch"/>：在 NSettingsScreen 每次<b>显示</b>时刷新已注入的 row。
+///
+/// ## 为什么需要这个 patch
+///
+/// <see cref="SettingsUiInjectionPatch"/> 是 patch <c>NSettingsScreen._Ready</c>——但 _Ready 只在
+/// NSettingsScreen 节点首次构造时跑<b>一次</b>。base game 用 NSubmenu 的 Show/Hide 切换显示，
+/// 切换时不会重新 _Ready。
+///
+/// 单纯靠 _Ready 注入会导致：
+///   - 首次打开官方设置 → row 注入 → 显示 EnableSpeedMultiplier 当前值（OK）
+///   - 在 BaseLib 模组配置 UI 改 EnableSpeedMultiplier 并保存 → property 已变
+///   - 切回官方设置 → _Ready <b>不再触发</b> → 我们注入的 row 还显示旧值（bug）
+///
+/// 反向（官方设置 → 模组配置）天然 OK：BaseLib 的 NConfigTickbox 在 _Ready 时 SetFromProperty，
+/// 而 BaseLib 的 NModConfigSubmenu.OnSubmenuShown 每次都重建/重 Load 控件，所以模组配置 UI
+/// 总能读到最新 property 值。
+///
+/// ## 修复
+///
+/// 监听 <c>NSettingsScreen.OnSubmenuShown</c>（每次显示都调）。复用
+/// <see cref="SettingsUiInjectionPatch.InjectRows"/>——它内部判断 row 已存在则
+/// 调 RefreshTickboxesInRow / RefreshSliderRow 重新从 property 读值。
+///
+/// BaseLib 自己也是用这套机制（参见 BaseLib.Patches.Utils.NSettingsScreen_OnSubmenuShown_Patch）。
+/// </summary>
+[HarmonyPatch(typeof(NSettingsScreen), "OnSubmenuShown")]
+internal static class SettingsUiOnSubmenuShownRefreshPatch
+{
+    [HarmonyPostfix]
+    private static void Postfix(NSettingsScreen __instance)
+    {
+        if (!PatchScope.IsEnabled) return;
+        if (__instance == null) return;
+
+        try
+        {
+            SettingsUiInjectionPatch.InjectRows(__instance);
+        }
+        catch (Exception ex)
+        {
+            MainFile.Logger.Error($"SettingsUiOnSubmenuShownRefreshPatch failed: {ex}");
+        }
     }
 }
