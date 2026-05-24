@@ -80,5 +80,11 @@
   "MULTIPLAYEROPTIMIZER-ENABLE_SPEED_MULTIPLIER.title": "Enable speed multiplier",
   "MULTIPLAYEROPTIMIZER-SPEED_MULTIPLIER.title": "Speed multiplier (stacks with FastMode)",
   "MULTIPLAYEROPTIMIZER-ENABLE_EXTRA_SPEED.title": "Enable Extra Speed Multiplier",
-  "MULTIPLAYEROPTIMIZER-EXTRA_SPEED_MULTIPLIER.title": "Extra Speed Multiplier"
+  "MULTIPLAYEROPTIMIZER-EXTRA_SPEED_MULTIPLIER.title": "Extra Speed Multiplier",
+  "MULTIPLAYEROPTIMIZER-MAP_LENGTH.title": "Map Length",
+  "MULTIPLAYEROPTIMIZER-ACT1_MAP_LENGTH.title": "Act 1 map length",
+  "MULTIPLAYEROPTIMIZER-ACT2_MAP_LENGTH.title": "Act 2 map length",
+  "MULTIPLAYEROPTIMIZER-ACT3_MAP_LENGTH.title": "Act 3 map length",
+  "MULTIPLAYEROPTIMIZER-ACT4_MAP_LENGTH.title": "Act 4 map length",
+  "MULTIPLAYEROPTIMIZER-ACT5_MAP_LENGTH.title": "Act 5 map length"
 }
