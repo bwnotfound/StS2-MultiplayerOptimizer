@@ -86,5 +86,7 @@
   "MULTIPLAYEROPTIMIZER-ACT2_MAP_LENGTH.title": "Act 2 map length",
   "MULTIPLAYEROPTIMIZER-ACT3_MAP_LENGTH.title": "Act 3 map length",
   "MULTIPLAYEROPTIMIZER-ACT4_MAP_LENGTH.title": "Act 4 map length",
-  "MULTIPLAYEROPTIMIZER-ACT5_MAP_LENGTH.title": "Act 5 map length"
+  "MULTIPLAYEROPTIMIZER-ACT5_MAP_LENGTH.title": "Act 5 map length",
+  "MULTIPLAYEROPTIMIZER-EXPERIMENTAL.title": "Experimental",
+  "MULTIPLAYEROPTIMIZER-DETERMINISTIC_MODEL_HASH.title": "Deterministic ModelDb hash (fixes hash mismatch; needs restart, both players)"
 }
