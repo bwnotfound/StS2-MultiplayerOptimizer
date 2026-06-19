@@ -221,7 +221,7 @@ public static class MonsterHpMultiplierPatch
                 if (creature == null) continue;
                 if (creature.Side != CombatSide.Enemy) continue;
                 if (creature.Monster == null) continue;
-                if (creature.ShowsInfiniteHp) continue; // 无敌阶段不动
+                if (creature.HpDisplay.IsInfinite()) continue; // 无敌阶段不动
 
                 var scaled = creature.MaxHp * mult;
                 if (scaled > MonsterRuntimeHpHelper.HpAmountCeiling) scaled = MonsterRuntimeHpHelper.HpAmountCeiling;
@@ -251,7 +251,7 @@ public static class MonsterDamageMultiplierPatch
     [HarmonyPostfix]
     public static void ApplyDamageMultiplier(
         IRunState runState,
-        CombatState? combatState,
+        ICombatState? combatState,
         Creature? dealer,
         ref decimal __result)
     {
@@ -321,7 +321,7 @@ public static class CreatureAddSummonHpMultiplierPatch
         if (creature == null) return;
         if (creature.Side != CombatSide.Enemy) return;
         if (creature.Monster == null) return;
-        if (creature.ShowsInfiniteHp) return; // 无敌阶段 - 让原方法保持
+        if (creature.HpDisplay.IsInfinite()) return; // 无敌阶段 - 让原方法保持
 
         PatchScope.Run(nameof(CreatureAddSummonHpMultiplierPatch), () =>
         {

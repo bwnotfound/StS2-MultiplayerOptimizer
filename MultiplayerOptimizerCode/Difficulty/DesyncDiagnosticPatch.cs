@@ -122,7 +122,7 @@ public static class DesyncDiagnosticSetUpCombatPatch
                     sb.AppendLine(
                         $"  Creature side={c.Side} monster={c.Monster?.Id?.Entry} " +
                         $"MaxHp={c.MaxHp} CurrentHp={c.CurrentHp} " +
-                        $"ShowsInfiniteHp={c.ShowsInfiniteHp}" +
+                        $"HpDisplay={c.HpDisplay}" +
                         (sob != null ? $" StarterMoveIdx={sob.StarterMoveIdx}" : ""));
                 }
             }
@@ -154,7 +154,7 @@ public static class DesyncDiagnosticDamagePatch
     [HarmonyPostfix]
     public static void Postfix(
         IRunState runState,
-        CombatState? combatState,
+        ICombatState? combatState,
         Creature? target,
         Creature? dealer,
         decimal __result)

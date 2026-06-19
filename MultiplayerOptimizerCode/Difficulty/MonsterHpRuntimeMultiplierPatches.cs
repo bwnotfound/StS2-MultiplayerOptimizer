@@ -136,7 +136,7 @@ internal static class MonsterRuntimeHpHelper
 
         // 关键：infinite-HP 阶段（Doormaker/WaterfallGiant 第一阶段）期间，
         // SetMaxAndCurrentHp(OriginalHp) 这种 reset 调用传的是已加倍值，不能再加倍
-        if (creature.ShowsInfiniteHp) return false;
+        if (creature.HpDisplay.IsInfinite()) return false;
 
         var mult = GetHpMult(creature);
         if (Math.Abs(mult - 1.0) < 1e-6) return false;

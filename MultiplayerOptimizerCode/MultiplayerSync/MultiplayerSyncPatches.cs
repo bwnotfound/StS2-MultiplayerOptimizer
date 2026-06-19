@@ -311,19 +311,21 @@ public static class HostBroadcastConfigOnStartPatch
 
 /// <summary>
 ///     Host 端：加载存档继续玩时在广播 LobbyBeginLoadedRunMessage 之前 sync 配置 + 等 ack。
-///     选择 patch BeginRunIfAllPlayersReady（同步 void）而不是 TryBeginRun（async Task）——
-///     async 方法的 Harmony prefix 行为不直观（state machine entry 比较绕），同步方法更稳定。
-///     BeginRunIfAllPlayersReady 在每次 SetReady 时调用。它会先检查 IsAboutToBeginGame()——
-///     只有所有连接玩家都 ready 时才真正 TryBeginRun。我们的 prefix 只在 IsAboutToBeginGame()
-///     时才介入 sync，否则放行让原方法做正常的 no-op。
+///     选择 patch BeginRunForAllPlayersIfAllReady（同步 void）而不是 TryBeginRunForAllPlayers
+///     （async Task）——async 方法的 Harmony prefix 行为不直观（state machine entry 比较绕），
+///     同步方法更稳定。
+///     （新版游戏改名：旧 BeginRunIfAllPlayersReady → 新 BeginRunForAllPlayersIfAllReady，语义一致。）
+///     BeginRunForAllPlayersIfAllReady 在每次 SetReady 时调用。它会先检查 IsAboutToBeginGame()——
+///     只有所有连接玩家都 ready 时才真正 TryBeginRunForAllPlayers。我们的 prefix 只在
+///     IsAboutToBeginGame() 时才介入 sync，否则放行让原方法做正常的 no-op。
 /// </summary>
-[HarmonyPatch(typeof(LoadRunLobby), "BeginRunIfAllPlayersReady")]
+[HarmonyPatch(typeof(LoadRunLobby), "BeginRunForAllPlayersIfAllReady")]
 public static class HostBroadcastConfigOnLoadPatch
 {
     private static MethodInfo? _originalMethod;
 
     private static MethodInfo OriginalMethod => _originalMethod ??= AccessTools.Method(
-        typeof(LoadRunLobby), "BeginRunIfAllPlayersReady");
+        typeof(LoadRunLobby), "BeginRunForAllPlayersIfAllReady");
 
     [HarmonyPriority(Priority.Low)]
     [HarmonyPrefix]
@@ -339,7 +341,7 @@ public static class HostBroadcastConfigOnLoadPatch
             return ConfigSyncFlow.StartSyncOrPassthrough(
                 __instance.NetService,
                 __instance.ConnectedPlayerIds,
-                // ack 成功后回调：用反射调原 BeginRunIfAllPlayersReady
+                // ack 成功后回调：用反射调原 BeginRunForAllPlayersIfAllReady
                 () => OriginalMethod.Invoke(__instance, null));
         }, true);
     }
