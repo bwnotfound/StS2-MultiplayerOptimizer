@@ -1,4 +1,4 @@
-﻿# StS2-MultiplayerOptimizer
+﻿# StS2-NotEnoughDifficulty
 
 English | [中文](../README.md)
 
@@ -52,22 +52,22 @@ sync, the host shows a popup and the run is refused — preventing in-combat des
 
 ### Steps
 
-1. Extract `MultiplayerOptimizer/` into `<game root>/mods/`, containing:
-    - `MultiplayerOptimizer.dll`
-    - `MultiplayerOptimizer.pck`
-    - `MultiplayerOptimizer.json`
+1. Extract `NotEnoughDifficulty/` into `<game root>/mods/`, containing:
+    - `NotEnoughDifficulty.dll`
+    - `NotEnoughDifficulty.pck`
+    - `NotEnoughDifficulty.json`
 2. Install BaseLib `v3.1.2` the same way
-3. Launch the game → Settings → Mods → enable MultiplayerOptimizer and BaseLib
+3. Launch the game → Settings → Mods → enable NotEnoughDifficulty and BaseLib
 
-Verify the mod loaded by checking the game log's first MultiplayerOptimizer line:
+Verify the mod loaded by checking the game log's first NotEnoughDifficulty line:
 
 ```
-[INFO] [MultiplayerOptimizer] [Init] Loading MultiplayerOptimizer version 0.3.0
+[INFO] [NotEnoughDifficulty] [Init] Loading NotEnoughDifficulty version 0.3.0
 ```
 
 ## Configuration
 
-Main menu → Settings → Mods → **MultiplayerOptimizer** → Configure
+Main menu → Settings → Mods → **NotEnoughDifficulty** → Configure
 
 Sliders organized by category:
 
@@ -91,7 +91,7 @@ The base game checks each connecting player's mod list by joining `<mod_id>-<ver
 literally. Any difference — a missing `v` prefix, extra dot, mismatched whitespace — is treated as a ModMismatch and the
 join is rejected.
 
-**Recommended workflow**: the host zips up their entire `MultiplayerOptimizer/` folder and sends it to every player, who
+**Recommended workflow**: the host zips up their entire `NotEnoughDifficulty/` folder and sends it to every player, who
 **completely replaces** their own local copy.
 
 ### Sync Flow
@@ -141,11 +141,11 @@ When the sync-failure popup shows, have the client reinstall the latest mod fold
 ## Feedback / Contributing
 
 Bug reports and feature requests welcome
-at [GitHub Issues](https://github.com/bwnotfound/StS2-MultiplayerOptimizer/issues).
+at [GitHub Issues](https://github.com/bwnotfound/StS2-NotEnoughDifficulty/issues).
 
 Please include with your bug report:
 
-- Mod version (first MultiplayerOptimizer line in the log)
+- Mod version (first NotEnoughDifficulty line in the log)
 - Reproduction steps
 - Host's full godot.log
 - If possible, the client's full godot.log

@@ -10,9 +10,9 @@ config_version=5
 
 [application]
 
-config/name="MultiplayerOptimizer"
+config/name="NotEnoughDifficulty"
 config/features=PackedStringArray("4.5", "C#", "Mobile")
-config/icon="res://MultiplayerOptimizer/mod_image.png"
+config/icon="res://NotEnoughDifficulty/mod_image.png"
 
 [display]
 
@@ -24,7 +24,7 @@ window/stretch/aspect="expand"
 
 [dotnet]
 
-project/assembly_name="MultiplayerOptimizer"
+project/assembly_name="NotEnoughDifficulty"
 
 [rendering]
 

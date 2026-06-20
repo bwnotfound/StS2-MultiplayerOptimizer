@@ -1,4 +1,4 @@
-﻿# StS2-MultiplayerOptimizer
+﻿# StS2-NotEnoughDifficulty
 
 [English](docs/README.en.md) | 中文
 
@@ -47,22 +47,22 @@ client mod 版本太旧或安装异常导致同步失败，host 端会弹窗提�
 
 ### 步骤
 
-1. 在 `<游戏根目录>/mods/` 下解压 `MultiplayerOptimizer/` 文件夹，确保其中包含：
-    - `MultiplayerOptimizer.dll`
-    - `MultiplayerOptimizer.pck`
-    - `MultiplayerOptimizer.json`
+1. 在 `<游戏根目录>/mods/` 下解压 `NotEnoughDifficulty/` 文件夹，确保其中包含：
+    - `NotEnoughDifficulty.dll`
+    - `NotEnoughDifficulty.pck`
+    - `NotEnoughDifficulty.json`
 2. 同样方式安装 BaseLib `v3.1.2`
-3. 启动游戏，主菜单 → 设置 → Mods 启用 MultiplayerOptimizer 和 BaseLib
+3. 启动游戏，主菜单 → 设置 → Mods 启用 NotEnoughDifficulty 和 BaseLib
 
 启动后游戏 log 第一行确认 mod 加载成功：
 
 ```
-[INFO] [MultiplayerOptimizer] [Init] Loading MultiplayerOptimizer version 0.3.0
+[INFO] [NotEnoughDifficulty] [Init] Loading NotEnoughDifficulty version 0.3.0
 ```
 
 ## 配置
 
-主菜单 → 设置 → Mods → **MultiplayerOptimizer** → Configure
+主菜单 → 设置 → Mods → **NotEnoughDifficulty** → Configure
 
 按分类组织的滑块：
 
@@ -84,7 +84,7 @@ client mod 版本太旧或安装异常导致同步失败，host 端会弹窗提�
 base game 用 `<mod_id>-<version>` 拼字符串校验联机双方的 mod 列表，任何一个字符不一致（包括是否有 `v` 前缀、点号位置）都会被判为
 ModMismatch 拒绝加入。
 
-**最稳的做法**：host 把整个 mod 文件夹打包发给所有玩家，让大家**完全替换**自己本地的 `MultiplayerOptimizer/` 目录。
+**最稳的做法**：host 把整个 mod 文件夹打包发给所有玩家，让大家**完全替换**自己本地的 `NotEnoughDifficulty/` 目录。
 
 ### 配置同步原理
 
@@ -128,7 +128,7 @@ host 收齐 ack → 调用原 begin run 流程 → 进入战斗
 
 ## 反馈 / 贡献
 
-bug 上报、功能建议请到 [GitHub Issues](https://github.com/bwnotfound/StS2-MultiplayerOptimizer/issues)。
+bug 上报、功能建议请到 [GitHub Issues](https://github.com/bwnotfound/StS2-NotEnoughDifficulty/issues)。
 
 报 bug 时请附上：
 
