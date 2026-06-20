@@ -39,7 +39,12 @@ public class ConfigSyncIgnoreAttribute : Attribute
 public sealed class ConfigSyncMessage : ICustomMessage
 {
     public Dictionary<string, double> Doubles { get; } = new();
+
     public Dictionary<string, bool> Bools { get; } = new();
+
+    // string 通道：重构后新增了 string 配置（ExcludedEncounterIdsCsv 移除列表）。
+    // 早期版本只有 double/bool，导致移除列表静默不同步 → host/client encounter 池不一致 → desync。
+    public Dictionary<string, string> Strings { get; } = new();
 
     /// <summary>host 端分配的 sync 标识，client ack 时回带，host 用来匹配 pending 状态。</summary>
     public ulong SyncId { get; set; }
@@ -69,12 +74,20 @@ public sealed class ConfigSyncMessage : ICustomMessage
             writer.WriteString(kv.Key);
             writer.WriteBool(kv.Value);
         }
+
+        writer.WriteInt(Strings.Count);
+        foreach (var kv in Strings)
+        {
+            writer.WriteString(kv.Key);
+            writer.WriteString(kv.Value);
+        }
     }
 
     public void Deserialize(PacketReader reader)
     {
         Doubles.Clear();
         Bools.Clear();
+        Strings.Clear();
 
         SyncId = reader.ReadULong();
         HostModVersion = reader.ReadString();
@@ -93,6 +106,14 @@ public sealed class ConfigSyncMessage : ICustomMessage
             var k = reader.ReadString();
             var v = reader.ReadBool();
             Bools[k] = v;
+        }
+
+        var sc = reader.ReadInt();
+        for (var i = 0; i < sc; i++)
+        {
+            var k = reader.ReadString();
+            var v = reader.ReadString();
+            Strings[k] = v;
         }
     }
 
@@ -130,7 +151,8 @@ public sealed class ConfigSyncMessage : ICustomMessage
             var value = prop.GetValue(null);
             if (value is double d) msg.Doubles[prop.Name] = d;
             else if (value is bool b) msg.Bools[prop.Name] = b;
-            // 其他类型（string/enum 等）目前没有，未来加字段时这里要扩展
+            else if (value is string s) msg.Strings[prop.Name] = s;
+            // 其他类型（enum 等）若未来新增，这里要继续扩展并同步 wire format + 版本号。
         }
 
         return msg;

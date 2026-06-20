@@ -16,7 +16,12 @@ internal partial class NotEnoughDifficultyConfig
     // 放在 .Acts.cs 顶部是为了让「展开点」紧贴它所控制的内容，而不是浮在配置页最上方。
     // ============================================================
 
-    [ConfigSection("Act4Act5Scaling")] public static bool ShowAct4Act5Details { get; set; } = false;
+    // 纯配置界面 UI 开关：只控制下方 act4/5 细项滑块在「本机」配置页是否展开，
+    // 不触及任何游戏 model/state。标 [ConfigSyncIgnore] 避免 host 开 run 时把 client 的
+    // UI 偏好覆盖掉（同步它没有任何 gameplay 意义）。
+    [ConfigSyncIgnore]
+    [ConfigSection("Act4Act5Scaling")]
+    public static bool ShowAct4Act5Details { get; set; } = false;
 
     // ============================================================
     // 池子混合权重（保存时归一化到 sum=1；sum=0 时恢复默认）

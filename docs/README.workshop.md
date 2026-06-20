@@ -1,0 +1,39 @@
+﻿# 还不够难！ / Not Enough Difficulty
+
+---
+
+## 中文
+
+把原版 3 层塔扩展为 **5 层塔**：第 4 层全精英，第 5 层全 Boss，并提供一整套按层精细调节的难度、地图与敌人池配置。单人、多人联机均可用；多人模式下 host 的配置会自动同步给所有玩家。
+
+作者：[蓝白bw](https://space.bilibili.com/107433411) ｜ 依赖：BaseLib
+
+**主要功能**：
+- 自定义第 4 层（全精英）/ 第 5 层（含最终 Boss）
+- 按 act 独立的 HP / 伤害倍率（整体 / 来源 / 普通 / Boss）
+- 难度预设：简单 / 困难 / 极限（一键）
+- 地图长度与房间密度调节（带总开关）
+- 敌人移除列表（按普通 / 精英 / Boss 选择，含层后缀与生效范围开关）
+- 额外加速模式
+- 多人配置自动同步（host → client）
+
+开源仓库：[bwnotfound/StS2-NotEnoughDifficulty](https://github.com/bwnotfound/StS2-NotEnoughDifficulty)
+
+---
+
+## English
+
+Expands the base 3-act tower into a **5-act tower**: Act 4 is all-elite, Act 5 is all-boss, with a full suite of per-act difficulty, map, and enemy-pool controls. Works in both single-player and multiplayer; in multiplayer the host's settings are automatically synced to all players.
+
+Author: [bwnotfound](https://space.bilibili.com/107433411) ｜ Dependency: BaseLib
+
+**Key features**:
+- Custom Act 4 (all-elite) / Act 5 (with the final boss)
+- Per-act HP / damage multipliers (overall / source / normal / boss)
+- Difficulty presets: Easy / Hard / Extreme (one-click)
+- Map length & room density control (with a master toggle)
+- Enemy removal list (pick normal / elite / boss, with layer suffixes and a scope toggle)
+- Extra speed mode
+- Automatic multiplayer config sync (host → client)
+
+Source: [bwnotfound/StS2-NotEnoughDifficulty](https://github.com/bwnotfound/StS2-NotEnoughDifficulty)

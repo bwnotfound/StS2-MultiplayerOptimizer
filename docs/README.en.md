@@ -2,157 +2,208 @@
 
 English | [中文](../README.md)
 
-A mod for *Slay the Spire 2* that adds extra acts and difficulty scaling for multiplayer runs.
+A mod for *Slay the Spire 2* that expands the original 3-act tower into a **5-act tower** and adds a full suite of **per-act difficulty, map, and enemy-pool** controls. Works in both single-player and multiplayer; in multiplayer the host's configuration is synced to every player.
+
+> Current version **0.7.0**. This version has been migrated to the latest game build and rebuilt on **BaseLib v3.3.0**'s registration-based localization.
+
+---
 
 ## Overview
 
-Two pain points the base game multiplayer has:
+Two pain points in the base game (especially multiplayer):
 
-1. **Runs end after 3 acts**, the same as singleplayer, which feels too short for co-op;
-2. **Difficulty is tuned for solo play**: multiple players hitting the same encounter pool without HP/damage scaling
-   makes fights too easy.
+1. **It ends after three acts** — runs feel short.
+2. **Difficulty is tuned for solo** — when several players gang up on the same enemies, the challenge is too low.
 
-This mod adds acts 4 and 5, exposes per-act HP / damage multipliers for both regular enemies and bosses, and ships a
-full config-synchronization pipeline so every connected player runs with the host's settings.
+This mod adds **Act 4 (all elites)** and **Act 5 (with the final boss)** after the base 3 acts, plus per-act HP/damage multipliers, difficulty presets, map-length control, an enemy removal list, an extra speed mode, and more. In multiplayer, ack-based config sync ensures all players start the run with the host's settings.
+
+---
 
 ## Features
 
-### Custom Acts 4 and 5
+### 1. Custom Acts 4 / 5
 
-- **Act 4**: an elite-only act. Every map node is forced to an elite icon. Encounter content is sampled from acts 1–3's
-  elite pool with configurable per-source weighting.
-- **Act 5**: a final-boss act. All middle combat nodes spawn boss-strength encounters; the top node is the real boss.
-- Other supporting features: per-act ancient pool, event pool, treasure rooms, boss de-duplication, etc.
+- **Act 4**: an all-elite act. Every map node is forced to an elite-combat icon; encounter content is mixed from the elite pools of acts 1–3 by configurable weights.
+- **Act 5**: an act containing the final boss. Mid-act combat nodes use boss-strength fights, with the real final boss at the top.
+- Each act has independent ancient / event pools, treasure rooms, and rest sites; bosses don't repeat across earlier acts.
 
-### Difficulty Multipliers (configurable per act)
+### 2. Difficulty Multipliers (per act)
 
-- **Global multipliers**: regular-enemy HP / damage are interpolated linearly between "start" and "end" values across
-  the act floors; boss HP / damage use a single scalar.
-- **Per-source multipliers**: enemies are scaled based on which act they originally come from. For example, an act-1
-  enemy seen in act 4 can be scaled by `1.4 × 1.8`, while an act-3 enemy in the same floor uses `1.4 × 1.0`.
+- **Overall**: a single HP / damage knob per act, applied on top of everything else — the most direct way to tune overall difficulty.
+- **Global**: regular-enemy HP/damage can interpolate linearly from "start → end" over act progress; bosses use a single multiplier.
+- **Source (Src)**: an additional multiplier based on the enemy's origin act (act 1/2/3) — e.g. act-1 enemies and act-3 enemies encountered in Act 4 can be scaled differently.
 
-### Weighted Pool Mixing
+### 3. Difficulty Presets (one-click)
 
-Act 4/5's encounter / event / boss / ancient pools draw from acts 1–3 based on user-configured weights. Weights are
-auto-normalized to sum to 1 on save — no manual math needed.
+Three preset buttons — **Easy / Hard / Extreme** — set the Act 4/5 overall HP/damage multipliers in one click (only the four Overall values; weights and detailed settings are left untouched, so behavior is predictable). Preset values are defined centrally in code for easy balance tweaking.
 
-### Automatic Config Sync (ack-based)
+### 4. Map Length & Room Density
 
-In multiplayer, **the host's mod configuration is automatically applied to all clients** for the duration of the run; on
-run end each client reloads their own settings from disk. If a client's mod is too outdated or fails to acknowledge the
-sync, the host shows a popup and the run is refused — preventing in-combat desync that would otherwise kick players.
+- Each act's map length (number of rows) is independently configurable (defaults: act1=16 / act2=15 / act3/4/5=14, matching vanilla).
+- Gated behind a **master toggle (off by default)**: length changes only apply when enabled, and the per-act sliders are hidden while disabled — so players don't change the map structure unknowingly.
+- When length increases, the density of special rooms (elite / rest / unknown) is **scaled accordingly** so the map isn't diluted by normal fights; very long maps also **skip the exponential path-pruning** step for performance.
+
+### 5. Enemy Removal List
+
+- A custom popup (opened from the "Manage" button in the config page) scans the game's registered **normal / elite / boss** encounters and offers three dropdowns to add enemies to a removal list, with add/remove support and fallbacks for duplicate add/remove and pool exhaustion.
+- Enemy names in the dropdowns/list carry a **layer suffix** (e.g. `(Act 1)`) to help gauge each pool's size; entries that can't be mapped to a layer are tagged `(Other)`.
+- Includes a **scope toggle**: defaults to "all acts (1–5)", optionally switchable to "only Acts 4–5".
+- Removed enemies are excluded from the corresponding act's draw (base acts use replacement-based filtering to avoid emptying a pool and failing to spawn fights).
+
+### 6. Extra Speed Mode
+
+- Injects two rows (enable toggle + multiplier slider) into the **game's official settings screen**, kept **value-synced** with the mod config screen.
+- Provides combat/animation speed multipliers beyond the vanilla cap for faster runs.
+
+### 7. Pool Weight Mixing
+
+Act 4/5 encounter / event / boss / ancient pools are mixed from acts 1–3 by user-configured weights. Weights are auto-normalized on save (sum = 1); all-zero falls back to defaults to avoid division by zero.
+
+### 8. Multiplayer Config Sync (ack-based)
+
+In multiplayer, the host's full mod config is automatically synced to all clients for the duration of the run; clients restore their local config from disk afterward. If a client is too old or sync fails, the host shows a popup and refuses to start the run, avoiding mid-combat value mismatches.
+
+### 9. Save-Load Robustness
+
+For multi-mod setups (where another mod drops data while handling the extra acts on the `FromSerializable` chain), a defensive guard fills null room id-lists on load to avoid a hard crash, and logs diagnostics for the affected act.
+
+---
 
 ## Installation
 
 ### Dependencies
 
 - *Slay the Spire 2* base game
-- [BaseLib](https://github.com/Alchyr/BaseLib-StS2) **v3.1.2** (exact version — base game compares mod version strings
-  literally during multiplayer join)
+- [BaseLib](https://github.com/Alchyr/BaseLib-StS2) **v3.3.0** (strict version — multiplayer validates the exact mod version string)
 
 ### Steps
 
-1. Extract `NotEnoughDifficulty/` into `<game root>/mods/`, containing:
+1. Extract the `NotEnoughDifficulty/` folder into `<game root>/mods/`, ensuring it contains:
     - `NotEnoughDifficulty.dll`
     - `NotEnoughDifficulty.pck`
     - `NotEnoughDifficulty.json`
-2. Install BaseLib `v3.1.2` the same way
-3. Launch the game → Settings → Mods → enable NotEnoughDifficulty and BaseLib
+2. Install BaseLib **v3.3.0** the same way.
+3. Launch the game, Main Menu → Settings → Mods, and enable NotEnoughDifficulty and BaseLib.
 
-Verify the mod loaded by checking the game log's first NotEnoughDifficulty line:
+Confirm a successful load in the log (the version is read from the manifest at runtime to avoid drift between code and json):
 
 ```
-[INFO] [NotEnoughDifficulty] [Init] Loading NotEnoughDifficulty version 0.3.0
+[INFO] [NotEnoughDifficulty] Loading NotEnoughDifficulty 0.7.0
 ```
+
+---
 
 ## Configuration
 
-Main menu → Settings → Mods → **NotEnoughDifficulty** → Configure
+Main Menu → Settings → Mods → **NotEnoughDifficulty** → Configure. Settings are grouped into sections:
 
-Sliders organized by category:
+| Section | Description |
+|---------|-------------|
+| `General` | Master toggle (enable/disable the whole difficulty suite) |
+| `Presets` | Easy / Hard / Extreme one-click preset buttons |
+| `Act4Act5Scaling` | Collapse toggle controlling whether the Act 4/5 detail rows are shown, to avoid information overload |
+| `Act4_OverallMultipliers` / `Act5_OverallMultipliers` | Per-act overall HP / damage multipliers |
+| `Act4_NormalEnemyMultipliers` / `Act5_NormalEnemyMultipliers` | Regular-enemy HP/damage (linear start→end over act progress) |
+| `Act4_BossMultipliers` / `Act5_FinalBossMultipliers` | Boss / final-boss HP/damage multipliers |
+| `Act4_NormalEnemySrcMultipliers` / `Act4_BossSrcMultipliers`, etc. | Per-origin-act multipliers (normal / boss, one set each for acts 4/5) |
+| `Act4_EncWeights` / `Act4_EventWeights` / `Act4_BossWeights` / `Act5_*` | Mixing weights from acts 1–3 for each pool |
+| `MapLength` | Map-length master toggle + per-act row sliders |
+| `RemovalList` | Enemy removal list entry ("Manage" button opens the popup) |
+| `Speed` | Extra speed multiplier (synced with the two injected rows in the game settings screen) |
+| `BehaviorToggles` | Behavior toggles like act5 boss warning, final-boss dedupe |
+| `Experimental` | Experimental options |
 
-| Category                                                | Description                                                        |
-|---------------------------------------------------------|--------------------------------------------------------------------|
-| `Act4_EncWeights` / `EventWeights` / `BossWeights`      | Act 4 encounter / event / boss pool mixing weights from acts 1–3   |
-| `Act4_NormalEnemyMultipliers`                           | Act 4 regular-enemy HP / damage (linear start → end across floors) |
-| `Act4_BossMultipliers`                                  | Act 4 boss HP / damage scalar                                      |
-| `Act4_NormalEnemySrcMultipliers` / `BossSrcMultipliers` | Per-source-act multipliers                                         |
-| `Act5_*`                                                | Same shape, applied to act 5                                       |
-| `BehaviorToggles`                                       | Act 5 boss-warning toggle, final-boss de-duplication toggle, etc.  |
+> **When a pool weight is set to 0**: normalization falls back to defaults (`Act1=0.25, Act2=0.35, Act3=0.40`) to avoid division by zero.
 
-**When all pool weights are set to 0**: the normalization logic falls back to defaults (
-`Act1=0.25, Act2=0.35, Act3=0.40`) instead of dividing by zero.
+---
 
 ## Multiplayer
 
-### Important: All players must run the exact same mod version
+### Important: all players must run the exact same mod version
 
-The base game checks each connecting player's mod list by joining `<mod_id>-<version>` into strings and comparing
-literally. Any difference — a missing `v` prefix, extra dot, mismatched whitespace — is treated as a ModMismatch and the
-join is rejected.
+The base game validates the peers' mod lists by concatenating `<mod_id>-<version>`; any character mismatch (including a `v` prefix or dot placement) is treated as a ModMismatch and rejected.
 
-**Recommended workflow**: the host zips up their entire `NotEnoughDifficulty/` folder and sends it to every player, who
-**completely replaces** their own local copy.
+**Safest approach**: the host packages the entire mod folder and sends it to everyone, who **completely replace** their local `NotEnoughDifficulty/` directory (along with the same BaseLib version).
 
-### Sync Flow
+### Config sync flow
 
 ```
-Host clicks ready to begin run
-  ↓
-Host's mod broadcasts all config values to each client
-  ↓ within 3s
-Each client applies the values to its static fields, sends ack
-  ↓
-Host has all acks → invokes the original begin-run flow → game starts
-              ↓ otherwise (timeout)
-              Popup: "Mod version mismatch — please ask these players to update".
-              Run does NOT start.
+host clicks ready to start the run
+  ↓ host broadcasts all config to clients
+  ↓ ≤ 3s
+all clients receive → apply to local static fields → ack
+  ↓ host collects all acks → original begin-run flow → into combat
+  ↓ otherwise
+  popup "Mod version incompatible, ask these players to upgrade", run does not start
 ```
 
-The sync happens during the lobby phase; players don't notice unless something fails (in which case there's a popup). On
-run end every client reloads their own config from disk, so their personal preferences aren't corrupted.
+Sync happens during the lobby phase and is invisible to players (unless an error popup appears). After the run, clients reload their own config from disk, leaving local settings untouched.
 
 ### Troubleshooting
 
-| Symptom                                              | Likely cause                                                                                                              |
-|------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
-| Kicked from lobby with "Mod Mismatch" on join        | Players' manifest files differ (version string, or different set of installed mods)                                       |
-| Host popup "Mod version mismatch" + run never starts | A client's mod isn't installed correctly or is too old; the sync message wasn't acked                                     |
-| "State divergence, disconnected" mid-combat          | Host and client computed different results — typically the client doesn't have this mod enabled, or its sync didn't apply |
+| Symptom | Likely cause |
+|---------|-------------|
+| Kicked with "Mod Mismatch" on joining the lobby | Manifests differ between players (different version string / an extra or missing mod) |
+| Host popup "Mod version incompatible" + run doesn't start | A client isn't installed correctly or is too old; sync got no ack |
+| "State divergence, disconnected" during combat | Host/client results diverge — usually a client without the mod enabled or sync didn't take effect |
 
-When the sync-failure popup shows, have the client reinstall the latest mod folder and restart the game.
+If you hit a sync-failure popup, have the client reinstall the latest mod folder and restart the game.
+
+---
+
+## Project Structure (after the migration/refactor)
+
+All code lives under `NotEnoughDifficultyCode/`, organized by feature:
+
+| Directory | Responsibility |
+|-----------|----------------|
+| `Core/` | Entry point `MainFile`, per-class isolated patching, the `PatchScope` master switch, run-state access |
+| `Config/` | `NotEnoughDifficultyConfig` (split into partials per section) + the `ExtraActsConfig` logic layer |
+| `ExtraActs/` | Acts 4/5: `Bootstrap` (inject the act list), `Models` (Act4/5Model), `Patches` (encounter replacement / dedupe / map nodes), `Pool` (mixing/dedupe utils), `Compat` (compatibility guards) |
+| `Difficulty/` | Runtime HP/damage multiplier application, desync diagnostics |
+| `MapLength/` | Map-length patches, density scaling, skip path-pruning for long maps |
+| `RemovalList/` | Enemy removal list popup UI |
+| `SpeedControl/` | Extra speed multiplier control |
+| `SettingsInjection/` | Injects the two speed rows into the game's settings screen (synced with config) |
+| `MultiplayerSync/` | Ack-based config sync, deterministic model hashing |
+| `Act5/` | Act-5 mid-boss flow/reward/dedupe patches |
+| `SaveCompat/` | `COMPAT-PRELAUNCH` inventory of legacy save-compat code (documentation directory) |
+
+---
 
 ## Known Issues
 
-- **Loading a save with missing original players may hang on a black screen**: e.g. loading a 3-player save with only 2
-  players present can deadlock the base game's `CombatStateSynchronizer`. **Workaround**: wait until everyone's online
-  before loading, or start a fresh run.
-- **No cross-version compatibility**: there's no protocol-level support for "I run new version, my friend runs old".
-  Players must upgrade together.
+- **Load crash in multi-mod setups**: some mods drop room data while handling this mod's extra acts on the `FromSerializable` chain, causing an `ArgumentNullException` on load. This mod adds a defensive guard to avoid a hard crash, but if the affected act is the current one there may be follow-up issues — please report the logs (see what `ExtraActs/Compat/RoomSetLoadNullGuardPatch.cs` prints).
+- **Loading an under-populated multiplayer save may hang on a black screen**: e.g. loading a 3-player save with only 2 players online can deadlock the base game's `CombatStateSynchronizer`. Workaround: wait for all original players, or start a new run.
+- **Different mod versions are incompatible**: after upgrading, teammates must upgrade in sync; there is no protocol-level backward compatibility.
 
-## Changelog
+---
 
-| Version | Highlights                                                                                                                                  |
-|---------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| 0.3.0   | ack-based config sync also covers `LoadRunLobby` (loading saves); version is now resolved at runtime from manifest (single source of truth) |
-| 0.2.0   | Config sync became ack-based; host refuses to start the run with a popup when a client doesn't ack                                          |
-| 0.1.0   | Initial release: acts 4–5, difficulty multipliers, fire-and-forget config broadcast                                                         |
+## Version History
+
+| Version | Highlights |
+|---------|-----------|
+| 0.7.0 | Migrated to the latest game build + BaseLib v3.3.0 (registration-based localization); added difficulty presets, map length/density control, enemy removal list (with layer suffixes and a scope toggle), extra speed mode, save-load robustness; directory & config refactor |
+| 0.4–0.6 | Difficulty system expansion (overall/source multipliers, per-act detail), collapsible config UI, various compatibility fixes (incremental) |
+| 0.3.0 | Ack-based config sync also on the LoadRunLobby path; version read from the manifest at runtime |
+| 0.2.0 | ConfigSync switched to ack-based; host refuses to start the run + popup when a client doesn't respond |
+| 0.1.0 | Initial release: basic Act 4/5 + config broadcast (fire-and-forget) |
+
+> 0.4–0.6 were incremental; no precise per-version changelog was kept, so the table summarizes that range.
+
+---
 
 ## Feedback / Contributing
 
-Bug reports and feature requests welcome
-at [GitHub Issues](https://github.com/bwnotfound/StS2-NotEnoughDifficulty/issues).
+Report bugs and suggest features at [GitHub Issues](https://github.com/bwnotfound/StS2-NotEnoughDifficulty/issues). When reporting a bug, please include:
 
-Please include with your bug report:
+- the mod version (first log line)
+- reproduction steps
+- the full host `godot.log` (and the client's if possible)
 
-- Mod version (first NotEnoughDifficulty line in the log)
-- Reproduction steps
-- Host's full godot.log
-- If possible, the client's full godot.log
+---
 
 ## Credits
 
-- [Alchyr](https://github.com/Alchyr) for [BaseLib](https://github.com/Alchyr/BaseLib-StS2) and
-  the [ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2) template
-- [GlitchedReme](https://github.com/GlitchedReme) for
-  the [Chinese STS2 modding tutorials](https://github.com/GlitchedReme/SlayTheSpire2ModdingTutorials)
+- [Alchyr](https://github.com/Alchyr)'s [BaseLib](https://github.com/Alchyr/BaseLib-StS2) and [ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2)
+- [GlitchedReme](https://github.com/GlitchedReme)'s [Chinese StS2 modding tutorials](https://github.com/GlitchedReme/SlayTheSpire2ModdingTutorials)

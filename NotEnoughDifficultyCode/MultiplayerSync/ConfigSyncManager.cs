@@ -160,11 +160,35 @@ internal static class ConfigSyncManager
             }
         }
 
+        var stringsApplied = 0;
+        var stringsSkipped = 0;
+        foreach (var kv in msg.Strings)
+        {
+            var prop = configType.GetProperty(kv.Key, BindingFlags.Public | BindingFlags.Static);
+            if (prop == null || !prop.CanWrite || prop.PropertyType != typeof(string))
+            {
+                stringsSkipped++;
+                continue;
+            }
+
+            try
+            {
+                prop.SetValue(null, kv.Value);
+                stringsApplied++;
+            }
+            catch (Exception ex)
+            {
+                MainFile.Logger.Warn($"[Sync] Failed to apply {kv.Key}='{kv.Value}': {ex.Message}");
+                stringsSkipped++;
+            }
+        }
+
         IsActive = true;
         MainFile.Logger.Info(
             $"[Sync] Applied host config (syncId={msg.SyncId}, hostVersion={msg.HostModVersion}): " +
-            $"{doublesApplied}/{msg.Doubles.Count} doubles, {boolsApplied}/{msg.Bools.Count} bools " +
-            $"(skipped {doublesSkipped} doubles + {boolsSkipped} bools as unknown to this version)");
+            $"{doublesApplied}/{msg.Doubles.Count} doubles, {boolsApplied}/{msg.Bools.Count} bools, " +
+            $"{stringsApplied}/{msg.Strings.Count} strings " +
+            $"(skipped {doublesSkipped} doubles + {boolsSkipped} bools + {stringsSkipped} strings as unknown to this version)");
 
         return new ApplyResult
         {
