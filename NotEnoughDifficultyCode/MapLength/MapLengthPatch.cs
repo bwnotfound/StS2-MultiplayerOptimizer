@@ -120,7 +120,7 @@ public static class MapLengthPatch
     /// base game 当前 act1/2/3 = Underdocks/Hive/Glory，本 mod 的 = Act4Model/Act5Model。
     /// Overgrowth 也映射到 act1，兼容旧版/其它模式下 act1 可能是该类型的情况。
     /// </summary>
-    private static int ResolveActIndex(ActModel act)
+    internal static int ResolveActIndex(ActModel act)
     {
         return act switch
         {
@@ -134,13 +134,28 @@ public static class MapLengthPatch
         };
     }
 
-    private static double GetConfiguredRows(int actIdx) => actIdx switch
+    internal static double GetConfiguredRows(int actIdx) => actIdx switch
     {
         1 => NotEnoughDifficultyConfig.Act1_MapLength,
         2 => NotEnoughDifficultyConfig.Act2_MapLength,
         3 => NotEnoughDifficultyConfig.Act3_MapLength,
         4 => NotEnoughDifficultyConfig.Act4_MapLength,
         5 => NotEnoughDifficultyConfig.Act5_MapLength,
+        _ => 14,
+    };
+
+    /// <summary>
+    /// 各 act 的「默认」单人地图行数（= 对应 config 字段的默认值，等于原版单人长度）。
+    /// 用于密度缩放比例 ratio = GetConfiguredRows / DefaultRows。必须与
+    /// NotEnoughDifficultyConfig.Act{N}_MapLength 的默认值保持一致。
+    /// </summary>
+    internal static double DefaultRows(int actIdx) => actIdx switch
+    {
+        1 => 16,
+        2 => 15,
+        3 => 14,
+        4 => 14,
+        5 => 14,
         _ => 14,
     };
 }

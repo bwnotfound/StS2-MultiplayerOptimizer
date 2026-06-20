@@ -1,6 +1,8 @@
 ﻿using BaseLib.Config;
+using BaseLib.Utils;
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
 using Logger = MegaCrit.Sts2.Core.Logging.Logger;
@@ -50,6 +52,40 @@ public partial class MainFile : Node
     {
         Logger.Info($"Loading {ModId} {ModVersion}");
 
+        // 注册自定义本地化表。新版 BaseLib（CustomLocTableManager）改为「登记制」：
+        // 只有被注册的表名才会进入 LocManager 的加载列表并与 res://<id>/localization/<lang>/<表>.json
+        // 做 merge。基础游戏没有的自定义表（settings_ui / acts）若不注册则永远不加载 → UI 显示原始 key。
+        foreach (var table in new[] { "settings_ui.json", "acts.json", "cards.json" })
+        {
+            try
+            {
+                CustomLocTableManager.Register(table);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Register loc table {table} failed: {ex}");
+            }
+        }
+
+        // ⚠️ 时机问题：LocManager 在创建/SetLanguage 时会把所有表 LoadTablesFromPath 后**缓存**。
+        // 如果 mod 的 Initialize（含上面的 Register）发生在 LocManager 首次加载**之后**，则我们刚
+        // 注册的表名没赶上那次加载 → 缓存里没有 mod 的 settings_ui/acts → UI 显示原始变量名。
+        // 解决：注册后用当前语言强制 SetLanguage 一次，重建缓存（此时 ListLocalizationFiles 已含
+        // 我们注册的表，会 merge res://NotEnoughDifficulty/localization/<lang>/<表>.json）。
+        // 若 LocManager 尚未创建（mod 先于它加载），Instance 为 null → 跳过，稍后它自然带上已注册的表。
+        try
+        {
+            var lm = LocManager.Instance;
+            if (lm != null && !string.IsNullOrEmpty(lm.Language))
+            {
+                lm.SetLanguage(lm.Language);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Force loc reload failed: {ex}");
+        }
+
         try
         {
             ModConfigRegistry.Register(ModId, new NotEnoughDifficultyConfig());
@@ -68,17 +104,28 @@ public partial class MainFile : Node
             Logger.Error($"ExtraActsBootstrap.Initialize failed: {ex}");
         }
 
-        // Harmony.PatchAll 整体包 try/catch：单个 patch class 内部异常会被 Harmony 包成
-        // HarmonyException 抛出，且**会中断剩余 patch 的应用**。我们宁可某个 patch 没生效，
-        // 也不希望整个 mod 因为一个 patch 出错就完全失效。
+        // 逐类隔离 patch：Harmony.PatchAll() 在某个 patch 类目标解析/应用失败时会抛异常并
+        // **中断剩余 patch 的应用**——一个坏 patch 能让后面所有 patch（如 MapLengthPatch）全部失效。
+        // 改成对每个类型单独 CreateClassProcessor().Patch() 并各自 try/catch：失败的只记日志、跳过，
+        // 不影响其它 patch。非 patch 类（无 [HarmonyPatch]）的 processor.Patch() 是 no-op，安全。
         try
         {
             var harmony = new Harmony(ModId);
-            harmony.PatchAll();
+            foreach (var type in System.Reflection.Assembly.GetExecutingAssembly().GetTypes())
+            {
+                try
+                {
+                    harmony.CreateClassProcessor(type).Patch();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Patch class {type.FullName} failed (skipped): {ex}");
+                }
+            }
         }
         catch (Exception ex)
         {
-            Logger.Error($"Harmony PatchAll failed: {ex}");
+            Logger.Error($"Harmony patching failed: {ex}");
         }
 
         // 注册全局速度控制器：每帧把 SpeedMultiplier config 同步到 Engine.TimeScale。

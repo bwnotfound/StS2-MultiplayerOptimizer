@@ -31,4 +31,33 @@ internal partial class NotEnoughDifficultyConfig : SimpleModConfig
     /// </summary>
     [ConfigSection("General")]
     public static bool Enabled { get; set; } = true;
+
+    // ============================================================
+    // 难度预设（需求4）：一键设置第 4·5 层「整体倍率」(Overall{Hp|Dmg}Mult)。
+    // Overall 倍率叠加在全局×来源倍率之后，是调整整体难度最直接的旋钮。
+    // 数值口径可按平衡意图调整（这里给一组合理的简单/困难/极限三档）。
+    // 预设只改 Overall 四个字段，不动其它细项，行为可预测。
+    // ============================================================
+
+    [ConfigSection("Presets")]
+    [ConfigButton("PRESET_EASY")]
+    public static void ApplyPresetEasy(ModConfig cfg) => ApplyPreset(cfg, hp: 0.6, dmg: 0.7);
+
+    [ConfigButton("PRESET_HARD")]
+    public static void ApplyPresetHard(ModConfig cfg) => ApplyPreset(cfg, hp: 1.3, dmg: 1.15);
+
+    [ConfigButton("PRESET_EXTREME")]
+    public static void ApplyPresetExtreme(ModConfig cfg) => ApplyPreset(cfg, hp: 2.0, dmg: 1.5);
+
+    private static void ApplyPreset(ModConfig cfg, double hp, double dmg)
+    {
+        Act4_OverallHpMult = hp;
+        Act4_OverallDmgMult = dmg;
+        Act5_OverallHpMult = hp;
+        Act5_OverallDmgMult = dmg;
+
+        // 落盘 + 通知 UI 重读（滑块等控件订阅了 OnConfigReloaded）
+        cfg.Save();
+        cfg.ConfigReloaded();
+    }
 }
