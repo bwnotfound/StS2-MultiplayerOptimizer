@@ -1,4 +1,5 @@
 ﻿using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Rooms;
 
 namespace NotEnoughDifficulty.NotEnoughDifficultyCode;
 
@@ -38,17 +39,105 @@ internal static class ExtraActsConfig
     /// </summary>
     public static readonly PoolWeights DefaultWeights = new(0.25, 0.35, 0.40);
 
-    /// <summary>所有注册的 boss 池过滤规则。新增过滤开关在这里追加一行 tuple 即可。</summary>
-    private static readonly BossPoolExclusion[] _exclusions =
+    // ============================================================
+    // 通用敌人移除列表（需求2）数据层
+    // ============================================================
+    //
+    // 取代旧的 _exclusions（单一 Doormaker 开关）。移除项以 Id.Entry 字符串存于
+    // NotEnoughDifficultyConfig.ExcludedEncounterIdsCsv（';' 分隔）。运行时由 ApplyRemovalFilter
+    // 在 act4/5 抽取点排除。增删由自建弹窗调用 Add/RemoveExclusion，落盘后即时生效（下次抽取）。
+
+    private const char ExclusionSep = ';';
+
+    /// <summary>当前移除列表（Id.Entry 集合），从 csv 解析。Ordinal 匹配，与游戏 Id.Entry 大小写一致。</summary>
+    public static HashSet<string> GetExcludedIds()
     {
-        new(
-            () => NotEnoughDifficultyConfig.ExcludeDoormakerFromBossPool,
-            new[] { "DOORMAKER_BOSS" },
-            "Doormaker")
-        // 未来加新 boss 排除：
-        // new(() => NotEnoughDifficultyConfig.ExcludeQueenFromBossPool,
-        //     new[] { "QUEEN_BOSS" }, "Queen"),
-    };
+        return new HashSet<string>(
+            NotEnoughDifficultyConfig.ExcludedEncounterIdsCsv
+                .Split(ExclusionSep, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>添加一个排除 id。兜底：已存在则不加、返回 false。</summary>
+    public static bool AddExclusion(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return false;
+        var set = GetExcludedIds();
+        if (!set.Add(id.Trim())) return false;
+        NotEnoughDifficultyConfig.ExcludedEncounterIdsCsv = string.Join(ExclusionSep, set);
+        return true;
+    }
+
+    /// <summary>移除一个排除 id。兜底：不存在则不动、返回 false（防重复删除）。</summary>
+    public static bool RemoveExclusion(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return false;
+        var set = GetExcludedIds();
+        if (!set.Remove(id.Trim())) return false;
+        NotEnoughDifficultyConfig.ExcludedEncounterIdsCsv = string.Join(ExclusionSep, set);
+        return true;
+    }
+
+    /// <summary>
+    ///     枚举游戏中已注册、属于指定 tier 的 encounter，返回 (id, 显示名) 列表（供 UI 下拉）。
+    ///     - 数据源 ModelDb.AllEncounters（含其它 mod），按 EncounterModel.RoomType 过滤。
+    ///     - 显示名优先用 EncounterModel.Title 的本地化文本，取不到回退 Id.Entry。
+    ///     - 时机：在「打开移除列表弹窗」时实时调用——那时所有 mod act 已注册、AllEncounters 完整。
+    ///     - 容错：任何访问抛异常都跳过该项，绝不让 UI 崩。
+    /// </summary>
+    public static IReadOnlyList<(string id, string name)> ListEncounters(RoomType tier)
+    {
+        var result = new List<(string id, string name)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        IEnumerable<EncounterModel> all;
+        try
+        {
+            all = ModelDb.AllEncounters;
+        }
+        catch
+        {
+            return result;
+        }
+
+        foreach (var e in all)
+        {
+            try
+            {
+                if (e == null || e.RoomType != tier) continue;
+                var id = e.Id?.Entry;
+                if (string.IsNullOrEmpty(id) || !seen.Add(id)) continue;
+                result.Add((id, ResolveDisplayName(e, id)));
+            }
+            catch
+            {
+                // 单个 encounter 访问异常（Id/RoomType/Title）不影响其它项
+            }
+        }
+
+        result.Sort((a, b) => string.Compare(a.name, b.name, StringComparison.CurrentCulture));
+        return result;
+    }
+
+    /// <summary>显示名：优先 EncounterModel.Title 本地化文本，取不到/为空/等于原始 key 时回退 Id.Entry。</summary>
+    public static string ResolveDisplayName(EncounterModel e, string fallbackId)
+    {
+        try
+        {
+            var title = e.Title;
+            var text = title?.GetFormattedText();
+            if (!string.IsNullOrWhiteSpace(text) &&
+                !text.Contains(".title")) // 未命中本地化时 LocString 常回显原始 key，含 ".title" 视为未翻译
+            {
+                return text;
+            }
+        }
+        catch
+        {
+            // ignore，回退 id
+        }
+
+        return fallbackId;
+    }
 
     // ============================================================
     // BGM Bank "额外可播放 event" 白名单
@@ -297,42 +386,48 @@ internal static class ExtraActsConfig
     ///     boss 排除列表里的 ID 撞）。
     ///     任何步骤抛异常都不会向上传播——返回原列表（不应用过滤）。这是 hot path 不能阻塞游戏。
     /// </summary>
-    public static List<EncounterModel> ApplyBossPoolFilters(IEnumerable<EncounterModel> source)
+    /// <summary>
+    ///     按「敌人移除列表」过滤一个 encounter 池：剔除 Id.Entry 命中 GetExcludedIds() 的 encounter。
+    ///     用于 act4 elite 池、act5 boss 混合池、顶端 boss 池三处运行时抽取点。
+    ///
+    ///     ## 关键兜底（池排空回退）
+    ///     若过滤会把一个<b>非空</b>池清空（玩家把该池能选的都加进了移除列表），则<b>回退返回原池</b>，
+    ///     避免抽不出战斗导致生成失败。代价是被排除项在该极端情况下仍可能出现——这是「有战斗」优先于
+    ///     「严格排除」的安全取舍。
+    ///
+    ///     ## 容错
+    ///     - 列表为空 → 直接返回原列表（跳过 enumeration）。
+    ///     - 任何异常 → 返回原列表（hot path 不阻塞游戏）。
+    ///     - 只按 Id.Entry 字符串匹配，与具体 EncounterModel 子类型完全解耦；列表里残留的「已不存在 id」
+    ///       永远匹配不到，是 no-op。
+    /// </summary>
+    public static List<EncounterModel> ApplyRemovalFilter(IEnumerable<EncounterModel> source)
     {
         var list = source as List<EncounterModel> ?? source.ToList();
 
-        // 收集当前所有启用规则对应的排除 ID。
-        // 每条规则单独 try——一个规则 IsEnabled 抛异常不影响其他规则
-        HashSet<string>? excluded = null;
-        foreach (var rule in _exclusions)
-        {
-            bool enabled;
-            try
-            {
-                enabled = rule.IsEnabled();
-            }
-            catch
-            {
-                continue;
-            }
-
-            if (!enabled) continue;
-            excluded ??= new HashSet<string>(StringComparer.Ordinal);
-            foreach (var id in rule.ExcludedEntries) excluded.Add(id);
-        }
-
-        if (excluded == null) return list; // 所有过滤开关都关闭 → 跳过 enumeration
-
-        // Id 可能为 null（未注册的 encounter），保守不过滤；
-        // 只有 Id.Entry 命中排除列表才剔除。
-        // 整段加 try 防止边缘 EncounterModel 访问 Id 抛 NRE。
+        HashSet<string> excluded;
         try
         {
-            return list.Where(e =>
+            excluded = GetExcludedIds();
+        }
+        catch
+        {
+            return list;
+        }
+
+        if (excluded.Count == 0) return list; // 移除列表为空 → 跳过
+
+        try
+        {
+            var filtered = list.Where(e =>
             {
                 var entry = e.Id?.Entry;
-                return entry == null || !excluded.Contains(entry);
+                return entry == null || !excluded.Contains(entry); // Id 为 null 保守不剔除
             }).ToList();
+
+            // ★ 池排空回退：非空池被清空 → 返回原池，保证有战斗可抽
+            if (filtered.Count == 0 && list.Count > 0) return list;
+            return filtered;
         }
         catch
         {
@@ -341,36 +436,16 @@ internal static class ExtraActsConfig
     }
 
     // ============================================================
-    // Boss 池过滤
+    // 移除列表过滤说明
     // ============================================================
     //
-    // ## 设计目标
-    // 让"开关 → 该开关启用时要从 boss 池排除哪些 encounter"的映射跟 base game 的具体 EncounterModel
-    // 子类<b>完全解耦</b>：
-    //   - <b>编译期解耦</b>：mod 不 reference 任何具体的 EncounterModel 子类型（如 DoormakerBoss），
-    //     即使将来 base game 删除这些类型，mod 也能正常编译。
-    //   - <b>运行期容错</b>：用字符串 ID (Id.Entry) 匹配；如果 base game 那个 encounter 实际不存在了，
-    //     字符串永远匹配不到 → filter 是 no-op → 既不崩溃也不影响其他 boss 抽样。
+    // ## 解耦设计（沿用旧 boss 过滤的思想）
+    // 移除项用字符串 Id.Entry 匹配，跟 base game 的具体 EncounterModel 子类型完全解耦：
+    //   - 编译期：mod 不 reference 任何具体 EncounterModel 子类型。
+    //   - 运行期：列表里残留的「已不存在 id」永远匹配不到 → no-op，不崩溃。
     //
-    // ## 注册新过滤开关的步骤
-    // 1. 在 NotEnoughDifficultyConfig.cs 加 `public static bool` 字段
-    // 2. 在 _exclusions 数组里加一行 BossPoolExclusion
-    // 3. 完。Act4Model / Act5Model / CustomActEncounterReplacementPatch 三处调用点无需改动
-    //
-    // ## 关于 Id.Entry 的字符串值
-    // base game 的 ModelDb.GetEntry 用 StringHelper.Slugify(type.Name) 生成 ID：
-    //   - CamelCase 拆分为下划线分隔
-    //   - 大写化
-    //   - 移除特殊字符
-    // 即 `DoormakerBoss` 类的 Id.Entry == "DOORMAKER_BOSS"。
-
-    /// <summary>
-    ///     一条 boss 池过滤规则：当 <c>IsEnabled</c> 返回 true 时，
-    ///     <c>ExcludedEntries</c> 列出的 Id.Entry 会从所有 boss 池中被剔除。
-    /// </summary>
-    /// <param name="Description">用于 log/调试的可读名字，不影响匹配逻辑。</param>
-    private sealed record BossPoolExclusion(
-        Func<bool> IsEnabled,
-        string[] ExcludedEntries,
-        string Description);
+    // ## Id.Entry 的字符串值
+    // base game 的 ModelDb.GetEntry 用 StringHelper.Slugify(type.Name) 生成 ID（CamelCase→下划线、
+    // 大写化、移除特殊字符），即 `DoormakerBoss` 的 Id.Entry == "DOORMAKER_BOSS"。UI 下拉直接展示
+    // ListEncounters() 扫描到的真实 id，无需硬编码。
 }

@@ -55,8 +55,8 @@ public static class DeduplicateCustomActBossesPatch
 
                 if (isCustomExtra)
                 {
-                    // 先应用 boss 池过滤开关（如 ExcludeDoormakerFromBossPool），再做 dedup 过滤
-                    var filtered = ExtraActsConfig.ApplyBossPoolFilters(act.AllBossEncounters);
+                    // 先应用「敌人移除列表」过滤（剔除被排除的 boss），再做 dedup 过滤
+                    var filtered = ExtraActsConfig.ApplyRemovalFilter(act.AllBossEncounters);
                     var available = filtered
                         .Where(b => !usedBossIds.Contains(b.Id.Entry))
                         .ToList();

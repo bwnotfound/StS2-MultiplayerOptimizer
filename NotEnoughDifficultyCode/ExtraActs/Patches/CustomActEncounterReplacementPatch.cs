@@ -52,13 +52,13 @@ public static class CustomActEncounterReplacementPatch
             if (__instance is Act4Model)
             {
                 // Act4: elite 内容用加权混合的 1+2+3 elite encounters 填充
-                // 不过滤 boss 池开关——这里用的是 elite 池
+                // 经 ApplyRemovalFilter 应用「敌人移除列表」（剔除被排除的 elite encounter）
                 var w = ExtraActsConfig.GetEncounterWeights(4);
                 var pools = new List<(IReadOnlyList<EncounterModel>, double)>
                 {
-                    (ModelDb.Act<Overgrowth>().AllEliteEncounters.ToList(), w.Act1),
-                    (ModelDb.Act<Hive>().AllEliteEncounters.ToList(), w.Act2),
-                    (ModelDb.Act<Glory>().AllEliteEncounters.ToList(), w.Act3)
+                    (ExtraActsConfig.ApplyRemovalFilter(ModelDb.Act<Overgrowth>().AllEliteEncounters), w.Act1),
+                    (ExtraActsConfig.ApplyRemovalFilter(ModelDb.Act<Hive>().AllEliteEncounters), w.Act2),
+                    (ExtraActsConfig.ApplyRemovalFilter(ModelDb.Act<Glory>().AllEliteEncounters), w.Act3)
                 };
                 var targetCount = rooms.eliteEncounters.Count;
                 EncounterListBuilder.FillWithWeightedPools(
@@ -85,13 +85,13 @@ public static class CustomActEncounterReplacementPatch
             else // Act5Model
             {
                 // Act5: normal + elite 内容都用加权混合的 1+2+3 boss encounters 填充
-                // 经过 ApplyBossPoolFilters 应用 ExcludeDoormakerFromBossPool 等 boss 池过滤开关
+                // 经 ApplyRemovalFilter 应用「敌人移除列表」（剔除被排除的 boss encounter）
                 var w = ExtraActsConfig.GetBossWeights(5);
                 var pools = new List<(IReadOnlyList<EncounterModel>, double)>
                 {
-                    (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Overgrowth>().AllBossEncounters), w.Act1),
-                    (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Hive>().AllBossEncounters), w.Act2),
-                    (ExtraActsConfig.ApplyBossPoolFilters(ModelDb.Act<Glory>().AllBossEncounters), w.Act3)
+                    (ExtraActsConfig.ApplyRemovalFilter(ModelDb.Act<Overgrowth>().AllBossEncounters), w.Act1),
+                    (ExtraActsConfig.ApplyRemovalFilter(ModelDb.Act<Hive>().AllBossEncounters), w.Act2),
+                    (ExtraActsConfig.ApplyRemovalFilter(ModelDb.Act<Glory>().AllBossEncounters), w.Act3)
                 };
 
                 var normalCount = rooms.normalEncounters.Count;

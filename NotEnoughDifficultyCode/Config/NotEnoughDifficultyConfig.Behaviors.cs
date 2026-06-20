@@ -15,13 +15,19 @@ internal partial class NotEnoughDifficultyConfig
     public static bool Act5_AvoidFinalBossEqualPenultimate { get; set; } = true;
 
     /// <summary>
-    ///     是否从第 4、5 层 boss 池中去除门扉缔造者（Doormaker）。
-    ///     开启后影响三处：
-    ///     1. Act4 顶部 boss 抽样（Act4Model.GenerateAllEncounters 构造的 boss 池）
-    ///     2. Act5 中部所有战斗（CustomActEncounterReplacementPatch 用的 act1/2/3 boss 混合池）
-    ///     3. Act5 顶部最终 boss（Act5Model.GenerateAllEncounters 复用的 Glory.AllEncounters）
+    ///     通用「敌人移除列表」的持久化后备字段（需求2）。存被排除 encounter 的 Id.Entry，
+    ///     以分隔符 ';' 拼接（例如 "DOORMAKER_BOSS;THE_GUARDIAN"）。
+    ///     - 用 string 而非 List&lt;string&gt;：config 序列化走 TypeConverter 转字符串存 Dictionary，
+    ///       集合类型无法 round-trip，string 才能正确存读。
+    ///     - [ConfigHideInUI]：照常存读到 cfg 文件，但不自动生成 UI——增删由自建弹窗
+    ///       （RemovalListPopup，[ConfigButton] 打开）操作，运行时由 ExtraActsConfig.ApplyRemovalFilter
+    ///       在 act4/5 抽取点排除。
+    ///     - 取代旧的 ExcludeDoormakerFromBossPool 单开关（已删除）；要排除门扉只需把
+    ///       DOORMAKER_BOSS 加进本列表即可。旧 cfg 里的 ExcludeDoormakerFromBossPool 值在加载时
+    ///       因无对应属性被忽略，不影响读取。
     /// </summary>
-    public static bool ExcludeDoormakerFromBossPool { get; set; } = false;
+    [ConfigHideInUI]
+    public static string ExcludedEncounterIdsCsv { get; set; } = "";
 
     /// <summary>
     ///     是否让 act4/5 玩家走的相邻战斗节点 encounter 不重复（避免连续打同样的怪组合）。
