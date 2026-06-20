@@ -131,6 +131,9 @@ internal static class SettingsUiInjectionPatch
         {
             // 已存在：触发 SetFromSettings 把当前 config 值同步到 UI
             RefreshTickboxesInRow(existingTickboxRow);
+            // 重设 label 文本：首次创建时若 mod loc 表尚未合并进游戏 settings_ui，
+            // GetFormattedText() 会缓存成原始 key；子菜单展示时 loc 已就绪，这里重新解析修正。
+            SetRowLabel(existingTickboxRow, "NOTENOUGHDIFFICULTY-ENABLE_EXTRA_SPEED.title");
         }
 
         // 4. Slider row 注入（在 tickbox 之后；如果 tickbox 没注入成功则直接在 FastMode 之后）
@@ -155,12 +158,26 @@ internal static class SettingsUiInjectionPatch
         else
         {
             RefreshSliderRow(existingSliderRow);
+            SetRowLabel(existingSliderRow, "NOTENOUGHDIFFICULTY-EXTRA_SPEED_MULTIPLIER.title");
+        }
+    }
+
+    /// <summary>
+    ///     设置注入行的标题文本（解析 mod 的 settings_ui loc key）。
+    ///     创建与刷新两条路径都用它：刷新路径重新解析可修正「首次创建时 loc 表未就绪 →
+    ///     GetFormattedText() 缓存成原始 key」的问题。
+    /// </summary>
+    private static void SetRowLabel(Node row, string locKey)
+    {
+        var label = row.GetNodeOrNull<MegaRichTextLabel>("Label");
+        if (label != null)
+        {
+            label.Text = new LocString("settings_ui", locKey).GetFormattedText();
         }
     }
 
     // -------------------------------------------------------------------------------------------
     // Tickbox row
-    // -------------------------------------------------------------------------------------------
 
     private static void InjectTickboxRow(VBoxContainer container, Control template, int insertIndex)
     {
@@ -178,12 +195,7 @@ internal static class SettingsUiInjectionPatch
         container.MoveChild(newRow, insertIndex);
 
         // 改 label 文本（label 本身没 _Ready 依赖，立即设 OK）
-        var label = newRow.GetNodeOrNull<MegaRichTextLabel>("Label");
-        if (label != null)
-        {
-            label.Text = new LocString("settings_ui", "NotEnoughDifficulty-ENABLE_EXTRA_SPEED.title")
-                .GetFormattedText();
-        }
+        SetRowLabel(newRow, "NOTENOUGHDIFFICULTY-ENABLE_EXTRA_SPEED.title");
 
         // 内部 NUploadDataTickbox 的 IsTicked 设置依赖 _Ready 里初始化的 _tickedImage/_notTickedImage
         // 字段——必须等 _Ready 之后再 RefreshTickboxesInRow，否则会 NPE。
@@ -238,12 +250,7 @@ internal static class SettingsUiInjectionPatch
         container.MoveChild(newRow, insertIndex);
 
         // 改 label 文本（立即可改，不依赖 _Ready）
-        var label = newRow.GetNodeOrNull<MegaRichTextLabel>("Label");
-        if (label != null)
-        {
-            label.Text = new LocString("settings_ui", "NotEnoughDifficulty-EXTRA_SPEED_MULTIPLIER.title")
-                .GetFormattedText();
-        }
+        SetRowLabel(newRow, "NOTENOUGHDIFFICULTY-EXTRA_SPEED_MULTIPLIER.title");
 
         // ⚠️ 关键：slider 行为必须等 NBgmVolumeSlider._Ready 跑完再绑定！
         //
