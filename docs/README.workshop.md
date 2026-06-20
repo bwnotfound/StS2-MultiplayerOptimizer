@@ -19,6 +19,8 @@
 
 开源仓库：[bwnotfound/StS2-NotEnoughDifficulty](https://github.com/bwnotfound/StS2-NotEnoughDifficulty)
 
+这是创意工坊前做出来和朋友一起玩用的，现在发出来让大家一起来吃苦doge。如果有BUG，请不要骂我喵。
+
 ---
 
 ## English
@@ -37,3 +39,5 @@ Author: [bwnotfound](https://space.bilibili.com/107433411) ｜ Dependency: BaseL
 - Automatic multiplayer config sync (host → client)
 
 Source: [bwnotfound/StS2-NotEnoughDifficulty](https://github.com/bwnotfound/StS2-NotEnoughDifficulty)
+
+I originally made this before the workshop release just to play with friends, and now I'm putting it out so everyone can suffer together (doge). If you run into a bug, please don't yell at me, meow.

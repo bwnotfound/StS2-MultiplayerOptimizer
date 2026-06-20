@@ -1,5 +1,5 @@
 ﻿<Project Sdk="Godot.NET.Sdk/4.5.2" InitialTargets="CheckDependencyPaths">
-    <Import Project=".\Sts2PathDiscovery.props"/>
+    <Import Project=".\Sts2PathDiscovery.props" />
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>true</ImplicitUsings>
@@ -30,73 +30,73 @@
     </ItemGroup>
 
     <ItemGroup Condition="False"> <!--Allows access to originally private/protected members but may (unlikely to) cause errors.-->
-        <Publicize Include="sts2" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false"/>
+        <Publicize Include="sts2" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Alchyr.Sts2.BaseLib" Version="3.3.0" PrivateAssets="All"/>
-        <PackageReference Include="Krafs.Publicizer" Version="2.3.0" PrivateAssets="All"/>
-        <PackageReference Include="Alchyr.Sts2.ModAnalyzers" Version="*"/>
+        <PackageReference Include="Alchyr.Sts2.BaseLib" Version="3.3.0" PrivateAssets="All" />
+        <PackageReference Include="Krafs.Publicizer" Version="2.3.0" PrivateAssets="All" />
+        <PackageReference Include="Alchyr.Sts2.ModAnalyzers" Version="*" />
         <!-- Generates a .pck file when building if only using simple assets. May not work on all setups. Uncomment to test. -->
         <!-- <PackageReference Include="BSchneppe.StS2.PckPacker" Version="0.1.1" PrivateAssets="All" /> -->
-        <AdditionalFiles Include="NotEnoughDifficulty/localization/**/*.json"/> <!-- Used by analyzer -->
+        <AdditionalFiles Include="NotEnoughDifficulty/localization/**/*.json" /> <!-- Used by analyzer -->
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Remove="NotEnoughDifficulty/**"/>
-        <Compile Remove="materials/**"/>
-        <Compile Remove="shaders/**"/>
-        <Compile Remove="images/**"/>
-        <EmbeddedResource Remove="NotEnoughDifficulty/**"/>
-        <EmbeddedResource Remove="materials/**"/>
-        <EmbeddedResource Remove="shaders/**"/>
-        <EmbeddedResource Remove="images/**"/>
+        <Compile Remove="NotEnoughDifficulty/**" />
+        <Compile Remove="materials/**" />
+        <Compile Remove="shaders/**" />
+        <Compile Remove="images/**" />
+        <EmbeddedResource Remove="NotEnoughDifficulty/**" />
+        <EmbeddedResource Remove="materials/**" />
+        <EmbeddedResource Remove="shaders/**" />
+        <EmbeddedResource Remove="images/**" />
     </ItemGroup>
 
     <ItemGroup>
-        <None Condition="Exists('Directory.Build.props')" Include="Directory.Build.props"/>
-        <None Include=".gitignore"/>
-        <None Include="NotEnoughDifficulty.json"/>
-        <None Include="project.godot"/>
-        <None Include="NotEnoughDifficulty/**"/>
+        <None Condition="Exists('Directory.Build.props')" Include="Directory.Build.props" />
+        <None Include=".gitignore" />
+        <None Include="NotEnoughDifficulty.json" />
+        <None Include="project.godot" />
+        <None Include="NotEnoughDifficulty/**" />
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="docs\README.en.md"/>
-        <Content Include="docs\README.workshop.md"/>
-        <Content Include="README.md"/>
+        <Content Include="docs\README.en.md" />
+        <Content Include="docs\README.workshop.md" />
+        <Content Include="README.md" />
     </ItemGroup>
 
     <Target Name="CheckDependencyPaths">
         <Error Text=" Slay the Spire 2 data not found at path '$(Sts2DataDir)'"
-               Condition="'$(Sts2DataDir)' == '' or !Exists('$(Sts2DataDir)')"/>
+               Condition="'$(Sts2DataDir)' == '' or !Exists('$(Sts2DataDir)')" />
     </Target>
 
     <Target Name="CopyToModsFolderOnBuild" AfterTargets="PostBuildEvent">
-        <Message Text="Copying .dll .pdb and .json to mods folder." Importance="high"/>
-        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(CustomModsPath)"/>
-        <Copy SourceFiles="$(AssemblyName).json" DestinationFolder="$(CustomModsPath)"/>
-        <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(CustomModsPath)"/>
+        <Message Text="Copying .dll .pdb and .json to mods folder." Importance="high" />
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(CustomModsPath)" />
+        <Copy SourceFiles="$(AssemblyName).json" DestinationFolder="$(CustomModsPath)" />
+        <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(CustomModsPath)" />
     </Target>
 
     <Target Name="CopyQuickPck" AfterTargets="PackPck"
             Condition="Exists('$(PckPackerOutputPath)') And '$(PckPackerSkipped)' != 'true'">
-        <Message Text="Copying quick .pck to mods folder." Importance="high"/>
-        <Copy SourceFiles="$(PckPackerOutputPath)" DestinationFolder="$(CustomModsPath)"/>
+        <Message Text="Copying quick .pck to mods folder." Importance="high" />
+        <Copy SourceFiles="$(PckPackerOutputPath)" DestinationFolder="$(CustomModsPath)" />
     </Target>
 
     <Target Name="NeedGodotForPublish" BeforeTargets="Publish">
         <Error
-                Text=" Godot path must be set up before publishing; Godot not found at path '$(GodotPath)'. Check Directory.Build.props file."
-                Condition="'$(GodotPath)' == '' or !Exists('$(GodotPath)')"/>
+            Text=" Godot path must be set up before publishing; Godot not found at path '$(GodotPath)'. Check Directory.Build.props file."
+            Condition="'$(GodotPath)' == '' or !Exists('$(GodotPath)')" />
     </Target>
 
     <Target Name="GodotPublish" AfterTargets="Publish"
             Condition="'$(GodotPath)' != '' and Exists('$(GodotPath)') and '$(IsInnerGodotExport)' != 'true'">
-        <Message Text="Exporting Godot .pck to mods folder" Importance="high"/>
+        <Message Text="Exporting Godot .pck to mods folder" Importance="high" />
         <Exec
-                Command="&quot;$(GodotPath)&quot; --headless --export-pack &quot;BasicExport&quot; &quot;$(CustomModsPath)/$(MSBuildProjectName).pck&quot;"
-                EnvironmentVariables="IsInnerGodotExport=true;MSBUILDDISABLENODEREUSE=1" ContinueOnError="WarnAndContinue"/>
+            Command="&quot;$(GodotPath)&quot; --headless --export-pack &quot;BasicExport&quot; &quot;$(CustomModsPath)/$(MSBuildProjectName).pck&quot;"
+            EnvironmentVariables="IsInnerGodotExport=true;MSBUILDDISABLENODEREUSE=1" ContinueOnError="WarnAndContinue" />
     </Target>
 
     <!-- ============================================================
@@ -112,14 +112,10 @@
     </PropertyGroup>
 
     <Target Name="CopyToModUploaderContent" AfterTargets="GodotPublish" Condition="'$(IsInnerGodotExport)' != 'true'">
-        <MakeDir Directories="$(ModUploaderContentDir)"/>
-        <Message Text="Publishing mod files + readme to ModUploader content: $(ModUploaderContentDir)"
-                 Importance="high"/>
+        <MakeDir Directories="$(ModUploaderContentDir)" />
+        <Message Text="Publishing mod files to ModUploader content: $(ModUploaderContentDir)" Importance="high" />
         <Copy
-                SourceFiles="$(CustomModsPath)\$(TargetFileName);$(CustomModsPath)\$(AssemblyName).json;$(CustomModsPath)\$(MSBuildProjectName).pck"
-                DestinationFolder="$(ModUploaderContentDir)"/>
-        <!-- 双语说明文档，发布时改名为 content/README.md -->
-        <Copy SourceFiles="$(MSBuildProjectDirectory)\docs\README.workshop.md"
-              DestinationFiles="$(ModUploaderContentDir)\README.md"/>
+            SourceFiles="$(CustomModsPath)\$(TargetFileName);$(CustomModsPath)\$(AssemblyName).json;$(CustomModsPath)\$(MSBuildProjectName).pck"
+            DestinationFolder="$(ModUploaderContentDir)" />
     </Target>
 </Project>
