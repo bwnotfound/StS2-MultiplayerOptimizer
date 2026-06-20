@@ -90,6 +90,7 @@ public static class MapLengthPatch
     public static void Postfix(ActModel __instance, bool isMultiplayer, ref int __result)
     {
         if (!PatchScope.IsEnabled) return;
+        if (!NotEnoughDifficultyConfig.MapLengthEnabled) return; // 总开关关闭 → 原版长度
         if (__instance == null) return;
 
         try

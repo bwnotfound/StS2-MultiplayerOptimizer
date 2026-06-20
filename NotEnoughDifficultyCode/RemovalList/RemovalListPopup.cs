@@ -44,21 +44,29 @@ public static class RemovalListPopup
         public readonly Dictionary<string, string> IdToName = new(StringComparer.Ordinal);
     }
 
-    /// <summary>打开弹窗。anchor：场景树里任意节点（用来拿 SceneTree.Root）。cfg：增删后落盘用。</summary>
+    /// <summary>
+    ///     打开弹窗。anchor 仅保留兼容；实际不依赖它拿树——本环境（RitsuLib 镜像 BaseLib 配置）
+    ///     传入的 NConfigButton 是游离节点（不在场景树里），button.GetTree() 会抛 "data.tree is null"。
+    ///     所以改用 Engine.GetMainLoop() 直接取 SceneTree（与任何节点是否在树无关）。
+    /// </summary>
     public static void Open(Node? anchor, ModConfig? cfg)
     {
         try
         {
-            var root = anchor?.GetTree()?.Root;
+            MainFile.Logger.Info("RemovalListPopup.Open invoked");
+
+            var tree = Engine.GetMainLoop() as SceneTree;
+            var root = tree?.Root;
             if (root == null)
             {
-                MainFile.Logger.Error("RemovalListPopup: cannot resolve scene root; abort open");
+                MainFile.Logger.Error("RemovalListPopup: cannot resolve SceneTree.Root; abort open");
                 return;
             }
 
             var ctx = new Ctx { Cfg = cfg, Layer = new CanvasLayer { Layer = 128 } };
             root.AddChild(ctx.Layer);
             Build(ctx);
+            MainFile.Logger.Info("RemovalListPopup built under SceneTree.Root");
         }
         catch (Exception ex)
         {
@@ -81,6 +89,14 @@ public static class RemovalListPopup
         dim.AddChild(center);
 
         var panel = new PanelContainer { CustomMinimumSize = new Vector2(760, 600) };
+        var panelStyle = new StyleBoxFlat
+        {
+            BgColor = new Color(0.12f, 0.12f, 0.14f, 0.98f),
+            BorderColor = new Color(0.5f, 0.5f, 0.55f, 1f),
+        };
+        panelStyle.SetBorderWidthAll(2);
+        panelStyle.SetCornerRadiusAll(8);
+        panel.AddThemeStyleboxOverride("panel", panelStyle);
         center.AddChild(panel);
 
         var margin = new MarginContainer();
@@ -95,6 +111,19 @@ public static class RemovalListPopup
         margin.AddChild(col);
 
         col.AddChild(new Label { Text = Loc("REMOVAL_LIST"), HorizontalAlignment = HorizontalAlignment.Center });
+
+        // 生效范围勾选框：勾上=只在4~5层生效；默认不勾=全层(1~5)生效
+        var onlyActs45 = new CheckBox
+        {
+            Text = Loc("ONLY_ACTS_45"),
+            ButtonPressed = NotEnoughDifficultyConfig.RemovalOnlyActs45,
+        };
+        onlyActs45.Toggled += pressed =>
+        {
+            NotEnoughDifficultyConfig.RemovalOnlyActs45 = pressed;
+            Persist(ctx);
+        };
+        col.AddChild(onlyActs45);
 
         col.AddChild(MakeTierRow(ctx, RoomType.Monster, Loc("TIER_MONSTER")));
         col.AddChild(MakeTierRow(ctx, RoomType.Elite, Loc("TIER_ELITE")));

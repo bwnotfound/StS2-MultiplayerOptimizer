@@ -40,14 +40,14 @@ internal partial class NotEnoughDifficultyConfig : SimpleModConfig
     // ============================================================
 
     [ConfigSection("Presets")]
-    [ConfigButton("PRESET_EASY")]
-    public static void ApplyPresetEasy(ModConfig cfg) => ApplyPreset(cfg, hp: 0.6, dmg: 0.7);
+    [ConfigButton("PresetEasy")]
+    public static void ApplyPresetEasy(ModConfig cfg) => ApplyPreset(cfg, hp: 0.8, dmg: 0.9);
 
-    [ConfigButton("PRESET_HARD")]
-    public static void ApplyPresetHard(ModConfig cfg) => ApplyPreset(cfg, hp: 1.3, dmg: 1.15);
+    [ConfigButton("PresetHard")]
+    public static void ApplyPresetHard(ModConfig cfg) => ApplyPreset(cfg, hp: 2, dmg: 1.4);
 
-    [ConfigButton("PRESET_EXTREME")]
-    public static void ApplyPresetExtreme(ModConfig cfg) => ApplyPreset(cfg, hp: 2.0, dmg: 1.5);
+    [ConfigButton("PresetExtreme")]
+    public static void ApplyPresetExtreme(ModConfig cfg) => ApplyPreset(cfg, hp: 5, dmg: 2);
 
     private static void ApplyPreset(ModConfig cfg, double hp, double dmg)
     {

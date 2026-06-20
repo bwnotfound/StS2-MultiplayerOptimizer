@@ -11,10 +11,11 @@ namespace NotEnoughDifficulty.NotEnoughDifficultyCode;
 internal partial class NotEnoughDifficultyConfig
 {
     [ConfigSection("RemovalList")]
-    [ConfigButton("MANAGE_REMOVAL_LIST")]
+    [ConfigButton("ManageRemovalList")]
     public static void OpenRemovalListPopup(NConfigButton button, ModConfig cfg)
     {
-        // button 注入用于拿 SceneTree.Root（把弹窗挂到顶层）；cfg 用于增删后落盘。
+        // button 注入用于拿 viewport/root（把弹窗挂到顶层）；cfg 用于增删后落盘。
+        MainFile.Logger.Info("OpenRemovalListPopup clicked");
         RemovalListPopup.Open(button, cfg);
     }
 }

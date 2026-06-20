@@ -3,7 +3,7 @@
   "name": "还不够难！(Not Enough Difficulty)",
   "author": "bwnotfound",
   "description": "扩展原版3层塔为5层塔，第4层全精英，第5层全boss，并添加额外自定义难度配置",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "has_pck": true,
   "has_dll": true,
   "dependencies": [

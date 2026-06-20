@@ -72,6 +72,7 @@ public static class MapDensityScalingPatch
     public static void Postfix(ActModel __instance, ref MapPointTypeCounts __result)
     {
         if (!PatchScope.IsEnabled) return;
+        if (!NotEnoughDifficultyConfig.MapLengthEnabled) return; // 总开关关闭 → 不缩放密度
         if (__instance == null || __result == null) return;
 
         try

@@ -30,6 +30,16 @@ internal partial class NotEnoughDifficultyConfig
     public static string ExcludedEncounterIdsCsv { get; set; } = "";
 
     /// <summary>
+    ///     移除列表的生效范围开关（需求2追加）。由 RemovalListPopup 里的勾选框控制。
+    ///     - false（默认）：<b>全层生效</b>——移除项在 1~5 层都被排除（base act 1~3 由
+    ///       BaseActRemovalFilterPatch 替换抽取，4~5 层由 CustomActEncounterReplacementPatch 过滤）。
+    ///     - true：<b>只在 4~5 层生效</b>——base act 1~3 不过滤，仅 4~5 层排除。
+    ///     多人：该 bool 会被 ConfigSync 同步，两端需一致（连同移除列表本身）才不 desync。
+    /// </summary>
+    [ConfigHideInUI]
+    public static bool RemovalOnlyActs45 { get; set; } = false;
+
+    /// <summary>
     ///     是否让 act4/5 玩家走的相邻战斗节点 encounter 不重复（避免连续打同样的怪组合）。
     ///     实现：CustomActEncounterReplacementPatch fill 完两个 list 之后用 EncounterDeduplicator
     ///     贪心重排（"任务调度: 重排相邻字符"算法）。

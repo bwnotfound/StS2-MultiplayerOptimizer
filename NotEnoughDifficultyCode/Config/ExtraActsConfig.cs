@@ -1,4 +1,5 @@
-﻿using MegaCrit.Sts2.Core.Models;
+﻿using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Rooms;
 
 namespace NotEnoughDifficulty.NotEnoughDifficultyCode;
@@ -89,6 +90,7 @@ internal static class ExtraActsConfig
     {
         var result = new List<(string id, string name)>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        var layerMap = BuildLayerMap();
         IEnumerable<EncounterModel> all;
         try
         {
@@ -99,6 +101,7 @@ internal static class ExtraActsConfig
             return result;
         }
 
+        var unmapped = new List<string>();
         foreach (var e in all)
         {
             try
@@ -106,7 +109,21 @@ internal static class ExtraActsConfig
                 if (e == null || e.RoomType != tier) continue;
                 var id = e.Id?.Entry;
                 if (string.IsNullOrEmpty(id) || !seen.Add(id)) continue;
-                result.Add((id, ResolveDisplayName(e, id)));
+
+                var name = ResolveDisplayName(e, id);
+                // 追加层后缀，例如 " (第一层)"；映射不到层的（其它 mod/特殊来源）标 "(其它)"，
+                // 保证每个都有后缀，并收集无主 id 供诊断
+                if (layerMap.TryGetValue(id, out var layer))
+                {
+                    name += " " + LayerSuffix(layer);
+                }
+                else
+                {
+                    name += " " + LayerSuffix(0);
+                    unmapped.Add(id);
+                }
+
+                result.Add((id, name));
             }
             catch
             {
@@ -114,8 +131,79 @@ internal static class ExtraActsConfig
             }
         }
 
+        if (unmapped.Count > 0)
+        {
+            MainFile.Logger.Info(
+                $"ListEncounters({tier}): {unmapped.Count} encounter(s) 无层映射 → 标记(其它): " +
+                string.Join(", ", unmapped));
+        }
+
         result.Sort((a, b) => string.Compare(a.name, b.name, StringComparison.CurrentCulture));
         return result;
+    }
+
+    /// <summary>
+    ///     建立 encounter id → 所属层(1/2/3) 的映射。用 <c>ModelDb.ActsByIndex</c> 按 act 的 Index 分组：
+    ///     同一层可能有多个变体 act（StS2 第一层就有 Overgrowth 和 Underdocks 两个区域，Index 都是 0），
+    ///     全部映射到该层，避免「某变体独有的 encounter 没后缀」。
+    ///     只取前 3 个 base 层（Index 0/1/2 → 第1/2/3层）：act4/5 复用 1~3 层 encounter、不单独成层，
+    ///     若把它们也扫进来会把复用的 encounter 误标成第4/5层。其它 mod 的 act 若挂在 Index 0/1/2 也会被正确归层。
+    ///     全程 try 包裹，取不到就少几个后缀，不崩。
+    /// </summary>
+    private static Dictionary<string, int> BuildLayerMap()
+    {
+        var map = new Dictionary<string, int>(StringComparer.Ordinal);
+        try
+        {
+            var byIndex = ModelDb.ActsByIndex;
+            int layers = System.Math.Min(byIndex.Count, 3); // 只映射 base 三层
+            for (int i = 0; i < layers; i++)
+            {
+                int layer = i + 1; // Index 0 = 第1层
+                foreach (var act in byIndex[i])
+                {
+                    if (act == null) continue;
+                    try
+                    {
+                        foreach (var e in act.AllEncounters)
+                        {
+                            var id = e?.Id?.Entry;
+                            if (!string.IsNullOrEmpty(id)) map[id] = layer;
+                        }
+                    }
+                    catch
+                    {
+                        // 单个 act 取池异常 → 跳过该 act
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // ActsByIndex 取不到 → 空表，全部无后缀（不崩）
+        }
+
+        return map;
+    }
+
+    /// <summary>层后缀文本，例如 "(第一层)"。layer&lt;=0 表示无层映射 → "(其它)"。取不到本地化回退英文。</summary>
+    private static string LayerSuffix(int layer)
+    {
+        var key = layer >= 1
+            ? $"NOTENOUGHDIFFICULTY-LAYER_{layer}.title"
+            : "NOTENOUGHDIFFICULTY-LAYER_OTHER.title";
+        try
+        {
+            var s = LocString.GetIfExists("settings_ui", key);
+            var text = s?.GetFormattedText();
+            if (!string.IsNullOrWhiteSpace(text)) return text;
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return layer >= 1 ? $"(Act {layer})" : "(Other)";
     }
 
     /// <summary>显示名：优先 EncounterModel.Title 本地化文本，取不到/为空/等于原始 key 时回退 Id.Entry。</summary>

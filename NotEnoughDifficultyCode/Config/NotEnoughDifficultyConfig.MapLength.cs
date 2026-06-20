@@ -52,19 +52,32 @@ namespace NotEnoughDifficulty.NotEnoughDifficultyCode;
 /// </summary>
 internal partial class NotEnoughDifficultyConfig
 {
+    /// <summary>
+    ///     地图长度功能总开关（默认 <b>关闭</b>）。关闭时 MapLengthPatch / MapDensityScalingPatch
+    ///     完全不生效，地图与原版一致——避免玩家在不知情下改变地图结构。
+    ///     打开后下面的各 act 行数滑块才起作用。
+    ///     多人：该 bool 也会被 ConfigSync 同步；两端必须一致（同开同关同值）才不 desync。
+    /// </summary>
     [ConfigSection("MapLength")]
+    public static bool MapLengthEnabled { get; set; } = false;
+
+    [ConfigVisibleIf(nameof(MapLengthEnabled))]
     [ConfigSlider(MapLengthPatch.MinRows, MapLengthPatch.MaxRows, 1)]
     public static double Act1_MapLength { get; set; } = 16;
 
+    [ConfigVisibleIf(nameof(MapLengthEnabled))]
     [ConfigSlider(MapLengthPatch.MinRows, MapLengthPatch.MaxRows, 1)]
     public static double Act2_MapLength { get; set; } = 15;
 
+    [ConfigVisibleIf(nameof(MapLengthEnabled))]
     [ConfigSlider(MapLengthPatch.MinRows, MapLengthPatch.MaxRows, 1)]
     public static double Act3_MapLength { get; set; } = 14;
 
+    [ConfigVisibleIf(nameof(MapLengthEnabled))]
     [ConfigSlider(MapLengthPatch.MinRows, MapLengthPatch.MaxRows, 1)]
     public static double Act4_MapLength { get; set; } = 14;
 
+    [ConfigVisibleIf(nameof(MapLengthEnabled))]
     [ConfigSlider(MapLengthPatch.MinRows, MapLengthPatch.MaxRows, 1)]
     public static double Act5_MapLength { get; set; } = 14;
 }
