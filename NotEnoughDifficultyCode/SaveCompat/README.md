@@ -22,7 +22,7 @@
 ## 关于"为什么只有这一处"
 
 本次重构严格遵守了"以重构后版本为兼容起点"原则，没有引入额外的向前兼容包袱：
-- `MultiplayerOptimizerConfig` 所有字段名保持不变 → 旧 cfg 文件能读
+- `NotEnoughDifficultyConfig` 所有字段名保持不变 → 旧 cfg 文件能读
 - `Act4Model` / `Act5Model` 类名不变 → 旧存档里的 `Acts[i].Id == "ACT4"/"ACT5"` 能匹配
 - `GetUnlockedAncients` 返回 Glory ancients（正确实现）→ 新 run 不再产生 null ancient
 

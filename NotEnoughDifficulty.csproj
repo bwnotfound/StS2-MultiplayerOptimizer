@@ -62,7 +62,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="dev\test.txt"/>
         <Content Include="docs\README.en.md"/>
         <Content Include="README.md"/>
     </ItemGroup>

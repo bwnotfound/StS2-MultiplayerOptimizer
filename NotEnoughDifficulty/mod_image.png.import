@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bul68c67br0ng"
-path="res://.godot/imported/mod_image.png-dc078dd9d758d1d5bb85711f2353f0e5.ctex"
+path="res://.godot/imported/mod_image.png-867a32dc98e0b58acd2ac18576070a09.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://NotEnoughDifficulty/mod_image.png"
-dest_files=["res://.godot/imported/mod_image.png-dc078dd9d758d1d5bb85711f2353f0e5.ctex"]
+dest_files=["res://.godot/imported/mod_image.png-867a32dc98e0b58acd2ac18576070a09.ctex"]
 
 [params]
 
