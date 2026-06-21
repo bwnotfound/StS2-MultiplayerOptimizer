@@ -67,8 +67,17 @@ internal static class PatchScope
         var isAct5 = act is Act5Model;
 
         var isAtFinalBoss = false;
-        if ((isAct4 || isAct5) && state.Map != null)
-            isAtFinalBoss = state.CurrentMapCoord == state.Map.BossMapPoint.coord;
+        try
+        {
+            // 防御：BossMapPoint 可能为 null（别的地图 mod 改了 map / 无 boss 点的异常地图）。
+            // 这里若抛会泄漏到所有用 TryEnter 的 patch，故 catch 兜成 false（=「不在最终 boss 点」安全默认）。
+            if ((isAct4 || isAct5) && state.Map != null)
+                isAtFinalBoss = state.CurrentMapCoord == state.Map.BossMapPoint.coord;
+        }
+        catch
+        {
+            isAtFinalBoss = false;
+        }
 
         ctx = new Context
         {

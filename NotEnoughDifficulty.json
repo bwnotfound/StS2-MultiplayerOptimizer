@@ -3,7 +3,7 @@
   "name": "还不够难！(Not Enough Difficulty)",
   "author": "bwnotfound",
   "description": "扩展原版3层塔为5层塔，第4层全精英，第5层全boss，并添加额外自定义难度配置。Extends the original 3-act tower to 5 acts: Act 4 is all-elite, Act 5 is all-boss, with extra customizable difficulty settings.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "has_pck": true,
   "has_dll": true,
   "dependencies": [

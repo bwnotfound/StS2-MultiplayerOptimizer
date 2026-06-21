@@ -4,7 +4,7 @@
 
 为《Slay the Spire 2》把原版 3 层塔扩展为 **5 层塔**，并提供一整套**按层精细调节的难度、地图与敌人池**配置的 mod。单人、多人联机均可用；多人下 host 端配置会自动同步给所有玩家。
 
-> 当前版本 **0.7.0**。本版本已整体迁移适配到新游戏版本，并基于 **BaseLib v3.3.0** 的登记制本地化重构。
+> 当前版本 **1.0.1**。已整体迁移适配新游戏版本，并基于 **BaseLib v3.3.0** 的登记制本地化重构。
 
 ---
 
@@ -88,7 +88,7 @@
 启动后 log 确认加载成功（版本号在运行时从 manifest 读取，避免代码与 json 漂移）：
 
 ```
-[INFO] [NotEnoughDifficulty] Loading NotEnoughDifficulty 0.7.0
+[INFO] [NotEnoughDifficulty] Loading NotEnoughDifficulty 1.0.1
 ```
 
 ---
@@ -183,6 +183,8 @@ host 点 ready 开 run
 
 | 版本 | 主要变化 |
 |------|---------|
+| 1.0.1 | 读档进 act5 第一场战斗除零崩（RoomSet.NextNormalEncounter）兜底：mod act 数据丢失时按池确定性重建 normal/elite/event/boss；多处 patch 防御性加固，兼容其它 mod 共同 patch |
+| 1.0.0 | 首个 Steam 创意工坊正式发布；修复 ConfigSync 漏同步 string 字段（移除列表）；新增创意工坊发布流程（csproj 发布到 ModUploader content） |
 | 0.7.0 | 整体迁移适配新游戏版本 + BaseLib v3.3.0（登记制本地化）；新增难度预设、地图长度/密度调节、敌人移除列表（含层后缀与生效范围开关）、额外加速模式、读档健壮性兜底；目录与配置重构 |
 | 0.4–0.6 | 难度系统扩充（整体/来源倍率、按层细项）、配置 UI 折叠分区、多项兼容性修复（增量迭代） |
 | 0.3.0 | LoadRunLobby 路径也启用 ack-based config sync；version 改为运行时从 manifest 读取 |

@@ -153,7 +153,17 @@ internal static class DifficultyMultiplierContext
     private static bool IsAtFinalBossNode(IRunState state)
     {
         if (state.Map == null) return false;
-        return state.CurrentMapCoord == state.Map.BossMapPoint.coord;
+        try
+        {
+            // 防御：BossMapPoint 可能为 null（别的地图 mod 改了 map / 异常地图）。与上面 Map==null
+            // 同一处理哲学——取不到最终 boss 点就视作「不在最终 boss」，让难度走普通倍率而非让
+            // 调用方整体 no-op（异常被上层 Run 吞掉会导致该敌人完全不缩放）。
+            return state.CurrentMapCoord == state.Map.BossMapPoint.coord;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static double GetActProgress(IRunState state)
@@ -203,14 +213,16 @@ public static class MonsterHpMultiplierPatch
         PatchScope.Run(nameof(MonsterHpMultiplierPatch), () =>
         {
             // 必须在 act4/5 才介入——其他 act 由 base game 控制
-            var act = state.RunState?.Act;
+            var runState = state.RunState;
+            if (runState == null) return;
+            var act = runState.Act;
             if (act is not Act4Model && act is not Act5Model) return;
 
             // 注意：DifficultyMultiplierContext 在每个 creature 上算出来的 mult 是相同的
             // （取决于 state.Act / state.Map / state.CurrentMapCoord / encounter，跟 creature 个体无关）。
             // 算一次即可，然后给所有 enemy 应用。
             var (hpMult, _) = DifficultyMultiplierContext.GetCurrentMultipliers(
-                state.RunState, state.Encounter);
+                runState, state.Encounter);
 
             if (Math.Abs(hpMult - 1.0) < 1e-6) return;
 

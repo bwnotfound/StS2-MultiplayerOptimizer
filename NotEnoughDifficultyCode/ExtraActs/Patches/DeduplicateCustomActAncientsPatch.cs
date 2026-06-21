@@ -74,11 +74,20 @@ public static class DeduplicateCustomActAncientsPatch
                     if (available.Count > 0)
                     {
                         var picked = state.Rng.UpFront.NextItem(available);
-                        rooms.Ancient = picked!;
-                        MainFile.Logger.Info(
-                            $"{act.Id.Entry} ancient re-rolled to avoid duplicate: " +
-                            $"'{currentId}' -> '{picked!.Id.Entry}' (avoided: [{string.Join(", ", usedAncientIds)}])");
-                        currentId = picked.Id.Entry;
+                        if (picked != null)
+                        {
+                            rooms.Ancient = picked;
+                            MainFile.Logger.Info(
+                                $"{act.Id.Entry} ancient re-rolled to avoid duplicate: " +
+                                $"'{currentId}' -> '{picked.Id.Entry}' (avoided: [{string.Join(", ", usedAncientIds)}])");
+                            currentId = picked.Id.Entry;
+                        }
+                        else
+                        {
+                            // 防御：池非空但 NextItem 返回 null（池里混进 null 项等）。保持原 Ancient，不 NRE。
+                            MainFile.Logger.Warn(
+                                $"{act.Id.Entry} ancient reroll skipped: NextItem returned null despite non-empty pool");
+                        }
                     }
                     else
                     {
