@@ -64,6 +64,7 @@
     <ItemGroup>
         <Content Include="docs\README.en.md" />
         <Content Include="docs\README.workshop.md" />
+        <Content Include="LICENSE" />
         <Content Include="README.md" />
     </ItemGroup>
 
