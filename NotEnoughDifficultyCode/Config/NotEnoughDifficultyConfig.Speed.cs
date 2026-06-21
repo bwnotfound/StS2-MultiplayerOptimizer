@@ -33,7 +33,7 @@ internal partial class NotEnoughDifficultyConfig
 
     [ConfigSyncIgnore]
     [ConfigSection("Speed")]
-    public static bool EnableSpeedMultiplier { get; set; } = true;
+    public static bool EnableSpeedMultiplier { get; set; } = false;
 
     [ConfigSyncIgnore]
     [ConfigSlider(0.5, 10.0, 0.1)]

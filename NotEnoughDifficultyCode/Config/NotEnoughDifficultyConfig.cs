@@ -49,6 +49,9 @@ internal partial class NotEnoughDifficultyConfig : SimpleModConfig
     [ConfigButton("PresetExtreme")]
     public static void ApplyPresetExtreme(ModConfig cfg) => ApplyPreset(cfg, hp: 5, dmg: 2);
 
+    [ConfigButton("PresetImpossible")]
+    public static void ApplyPresetImpossible(ModConfig cfg) => ApplyPreset(cfg, hp: 12, dmg: 3);
+
     private static void ApplyPreset(ModConfig cfg, double hp, double dmg)
     {
         Act4_OverallHpMult = hp;

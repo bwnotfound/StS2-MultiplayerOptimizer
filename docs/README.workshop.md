@@ -4,7 +4,7 @@
 
 ## 中文
 
-把原版 3 层塔扩展为 **5 层塔**：第 4 层全精英，第 5 层全 Boss，并提供一整套按层精细调节的难度、地图与敌人池配置。单人、多人联机均可用；多人模式下 host 的配置会自动同步给所有玩家。
+把原版 3 层塔扩展为 **5 层塔**：第 4 层全精英，第 5 层全 Boss，并提供自定义血量/攻击、地图与敌人池配置。还能自定义每一层的地图长度——按层独立设置楼层行数，把塔拉长、塞进更多战斗与房间。自带额外游戏速度加速，在原版游戏加速基础上进一步加速。单人、多人联机均可用；多人模式下 host 的配置会自动同步给所有玩家。
 
 作者：[蓝白bw](https://space.bilibili.com/107433411) ｜ 依赖：BaseLib
 
@@ -25,7 +25,7 @@
 
 ## English
 
-Expands the base 3-act tower into a **5-act tower**: Act 4 is all-elite, Act 5 is all-boss, with a full suite of per-act difficulty, map, and enemy-pool controls. Works in both single-player and multiplayer; in multiplayer the host's settings are automatically synced to all players.
+Expands the base 3-act tower into a **5-act tower**: Act 4 is all-elite, Act 5 is all-boss, with custom HP/attack, map, and enemy-pool settings. You can also customize each act's map length — set the number of floors per act independently to make the tower longer and pack in more fights and rooms. It also adds an extra game-speed boost that goes further on top of the base game's fast mode. Works in both single-player and multiplayer; in multiplayer the host's settings are automatically synced to all players.
 
 Author: [bwnotfound](https://space.bilibili.com/107433411) ｜ Dependency: BaseLib
 
